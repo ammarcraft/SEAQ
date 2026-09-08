@@ -20,9 +20,13 @@ import {
   Flame,
   Anchor,
   Zap,
+  Activity,
+  ShieldCheck,
 } from 'lucide-react';
 import PortCallBerthingCard from './components/PortCallBerthingCard';
 import FuelManagementCard, { MARINE_FUELS_LIST } from './components/FuelManagementCard';
+import ApiDiagnosticsModal from './components/ApiDiagnosticsModal';
+import { getNavigableSeaRoute } from './services/maritimeRouting';
 import { fetchStormglassDataWithFailover } from './services/stormglassService';
 import {
   ResponsiveContainer,
@@ -268,6 +272,7 @@ export default function App() {
   const [selectedShip, setSelectedShip] = useState(SHIP_TYPES[0]);
   const [showShipModal, setShowShipModal] = useState(false);
   const [shipSearchFilter, setShipSearchFilter] = useState('');
+  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
 
   const [cargoWeight, setCargoWeight] = useState(32000);
   const [deadlineDate, setDeadlineDate] = useState(getDefaultDeadline);
@@ -358,7 +363,7 @@ export default function App() {
     return `${curr.symbol}${converted.toLocaleString()}`;
   }, [selectedCurrency]);
 
-  // Carbon Regulatory Scheme (EU ETS vs IMO)
+  // Carbon Regulatory Scheme (EU ETS vs IMO Dual Compliance)
   const isEuropeVoyage = useMemo(() => {
     return Boolean(destPort?.isEurope || startPort?.isEurope);
   }, [destPort, startPort]);
@@ -369,34 +374,35 @@ export default function App() {
       const baseUsd = 92.0; // EU ETS Allowance price per MT
       const totalUsd = Math.round(co2eTonnes * baseUsd);
       const convertedRate = Math.round(baseUsd * curr.rate);
+      const projectedLevyUsd = Math.round(co2eTonnes * 100 * curr.rate);
       return {
-        schemeName: 'EU ETS Maritime Compliance',
-        regulator: 'European Union Maritime Directive (Legally Binding 2024)',
+        schemeName: 'EU ETS & IMO Dual Compliance',
+        regulator: 'EU Maritime Directive 2023/959 + IMO MARPOL Annex VI',
         isEU: true,
-        statusBadge: 'Active Statutory Tax (Jan 2024)',
-        rateLabel: `${curr.symbol}${convertedRate.toLocaleString()} / tCO₂e`,
+        statusBadge: 'Dual Framework: Statutory Tax + IMO Standards',
+        rateLabel: `${curr.symbol}${convertedRate.toLocaleString()} / tCO₂e (EU ETS EUA)`,
         totalTax: formatCurrency(totalUsd),
         savings: formatCurrency(Math.round(totalUsd * 0.22)),
-        description: 'Mandatory EUA allowance surrender required under EU law for all voyages touching European ports.',
-        ciiGrade: 'CII Grade B (Compliant)',
+        description: 'Vessels calling European ports must comply concurrently with EU ETS financial taxes and global IMO MARPOL operational standards.',
+        ciiGrade: 'CII Grade B (Net-Zero Compliant)',
+        imoEnforcementText: 'IMO Regulatory Reality: IMO does NOT issue cash invoices today. Non-compliant vessels (3 yrs Grade D, or 1 yr Grade E) face mandatory SEEMP Part III Corrective Action Plans and Port State Control (PSC) commercial detention/suspension.',
+        projectedLevy: `${curr.symbol}${projectedLevyUsd.toLocaleString()}`,
       };
     } else {
       // Non-Europe International Waters:
-      // Clarification: IMO currently enforces operational CII Ratings (A to E).
-      // The $100/t levy is the projected 2027 Net-Zero Economic Measure under MEPC 80.
-      const projectedLevyUsd = 100.0;
-      const totalUsd = Math.round(co2eTonnes * projectedLevyUsd);
-      const convertedRate = Math.round(projectedLevyUsd * curr.rate);
+      const projectedLevyUsd = Math.round(co2eTonnes * 100 * curr.rate);
       return {
-        schemeName: 'IMO CII Rating & Net-Zero Levy',
+        schemeName: 'IMO MARPOL Annex VI (CII Framework)',
         regulator: 'International Maritime Organization (IMO MEPC)',
         isEU: false,
-        statusBadge: 'CII Active Rating • Levy Projected (2027)',
-        rateLabel: `${curr.symbol}${convertedRate.toLocaleString()} / tCO₂e (Projected 2027)`,
-        totalTax: formatCurrency(totalUsd),
-        savings: formatCurrency(Math.round(totalUsd * 0.22)),
-        description: 'IMO actively enforces operational CII ratings (A-E); universal cash invoicing ($100/t) is projected for 2027 adoption under the IMO Net-Zero Strategy.',
+        statusBadge: 'Active Operational Rating • No Current Cash Fines',
+        rateLabel: 'Operational Efficiency Rating (Grades A to E)',
+        totalTax: 'No Statutory Cash Tax Today',
+        savings: 'N/A (Operational Metric)',
+        description: 'IMO actively regulates emissions through annual Carbon Intensity Indicator (CII) operational ratings rather than commercial tax billing.',
         ciiGrade: 'CII Grade B (Net-Zero Compliant)',
+        imoEnforcementText: 'IMO Regulatory Reality: IMO does not charge cash fines. It issues operational ratings (A-E); Grade D/E requires mandatory SEEMP Part III corrective actions, risking loss of Statement of Compliance (SoC) and Port State Control detention.',
+        projectedLevy: `${curr.symbol}${projectedLevyUsd.toLocaleString()}`,
       };
     }
   }, [isEuropeVoyage, co2eTonnes, selectedCurrency, formatCurrency]);
@@ -438,64 +444,35 @@ export default function App() {
     });
   }, [noiseZoneCoords]);
 
-  // Route calculation
+  // Route calculation with Autonomous Maritime Sea-Lane Guarantee
   const calculateRoute = useCallback(async (customStart, customDest) => {
     setIsOptimizing(true);
-    const sPort = customStart || startPort;
-    const dPort = customDest || destPort;
-    const src = `${sPort.coords[0]},${sPort.coords[1]}`;
-    const dst = `${dPort.coords[0]},${dPort.coords[1]}`;
+    const sPort = (customStart && Array.isArray(customStart.coords)) ? customStart : startPort;
+    const dPort = (customDest && Array.isArray(customDest.coords)) ? customDest : destPort;
     let computedNM = 10493;
 
     try {
-      const res = await fetch(`/api/searoutes/route/v2/sea/${src};${dst}?continuousCoordinates=true`, {
-        headers: { 'x-api-key': API_KEYS.SEAROUTES }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.features?.[0]?.geometry) {
-          setRouteGeoJson(data.features[0]);
-          const distKm = data.features[0].properties?.distance / 1000;
-          computedNM = Math.round(distKm * 0.539957);
-          setDistanceNM(computedNM);
+      const result = await getNavigableSeaRoute(sPort, dPort, API_KEYS.SEAROUTES);
+      if (result && result.geoJson) {
+        setRouteGeoJson(result.geoJson);
+        computedNM = result.distanceNM;
+        setDistanceNM(computedNM);
 
-          const coords = data.features[0].geometry.coordinates;
-          if (coords && coords.length > 1) {
-            const nextIdx = Math.min(3, coords.length - 1);
-            const brng = calculateBearing(coords[0][1], coords[0][0], coords[nextIdx][1], coords[nextIdx][0]);
-            setDepartureAngle(brng);
+        const coords = result.coordinates;
+        if (coords && coords.length > 1) {
+          const nextIdx = Math.min(3, coords.length - 1);
+          const brng = calculateBearing(coords[0][1], coords[0][0], coords[nextIdx][1], coords[nextIdx][0]);
+          setDepartureAngle(brng);
 
-            const midIndex = Math.floor(coords.length * 0.45);
-            setVesselPosition(coords[midIndex]);
-            setTimeout(() => {
-              fitRouteBounds(coords);
-            }, 300);
-          }
+          const midIndex = Math.floor(coords.length * 0.45);
+          setVesselPosition(coords[midIndex]);
+          setTimeout(() => {
+            fitRouteBounds(coords);
+          }, 300);
         }
-      } else {
-        throw new Error('Searoutes fallback');
       }
-    } catch {
-      const fallbackCoords = [
-        sPort.coords,
-        [(sPort.coords[0] + dPort.coords[0]) / 2, (sPort.coords[1] + dPort.coords[1]) / 2 + 3],
-        dPort.coords,
-      ];
-      setRouteGeoJson({
-        type: 'Feature',
-        properties: { name: `${sPort.name} -> ${dPort.name}` },
-        geometry: {
-          type: 'LineString',
-          coordinates: fallbackCoords,
-        },
-      });
-      computedNM = 8800;
-      setDistanceNM(computedNM);
-      const fallbackBrng = calculateBearing(startPort.coords[1], startPort.coords[0], destPort.coords[1], destPort.coords[0]);
-      setDepartureAngle(fallbackBrng);
-      setTimeout(() => {
-        fitRouteBounds(fallbackCoords);
-      }, 300);
+    } catch (err) {
+      console.warn('[Route Calculation] Fallback exception:', err);
     }
 
     // Climatiq
@@ -818,6 +795,19 @@ export default function App() {
           >
             <Waves className={`w-3.5 h-3.5 text-purple-600 ${isRefreshingOcean ? 'animate-pulse' : ''}`} />
             <span className="hidden sm:inline">Waves: {liveOceanData?.waveHeight || '0.8'}m</span>
+          </button>
+
+          {/* API DIAGNOSTICS & TELEMETRY MONITOR (PASSCODE: toothfairy) */}
+          <button
+            onClick={() => setIsDiagnosticsOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-purple-500/40 text-purple-300 text-xs font-semibold transition-all shadow-sm group"
+            title="System API Health & Diagnostics (Unlock via secret key 'toothfairy')"
+          >
+            <Activity className="w-3.5 h-3.5 text-purple-400 group-hover:animate-spin" />
+            <span className="hidden sm:inline">Diagnostics</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 font-mono border border-purple-700/50">
+              ⚡ toothfairy
+            </span>
           </button>
 
           {/* FULL MAP VIEW TOGGLE */}
@@ -1308,7 +1298,7 @@ export default function App() {
             {/* DESTINATION PORT CALL & BERTHING / PARKING CONTAINER */}
             <PortCallBerthingCard destPort={destPort} formatCurrency={formatCurrency} />
 
-            {/* Carbon Regulatory Container (EU ETS vs IMO Legal Distinction) */}
+            {/* Carbon Regulatory Container (EU ETS vs IMO Dual Compliance) */}
             <div className="rounded-2xl bg-white/95 backdrop-blur-md border border-purple-100 p-4 shadow-lg">
               <div className="flex items-center justify-between mb-1.5">
                 <div>
@@ -1332,18 +1322,27 @@ export default function App() {
                   <span className="text-slate-900 font-bold text-xs">{co2eTonnes.toLocaleString()} MT</span>
                 </div>
                 <div className="p-2 rounded-xl bg-purple-50/60 border border-purple-100">
-                  <span className="text-[10px] text-slate-500 block">Carbon Liability</span>
+                  <span className="text-[10px] text-slate-500 block">
+                    {carbonTaxDetails.isEU ? 'EU ETS Statutory Tax' : 'Direct Cash Invoicing'}
+                  </span>
                   <span className="text-purple-900 font-bold text-xs">{carbonTaxDetails.totalTax}</span>
                 </div>
               </div>
 
-              <div className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between text-[11px] mb-2">
-                <span className="text-slate-600 font-medium">Compliance Rating:</span>
+              <div className="px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between text-[11px] mb-2">
+                <span className="text-slate-600 font-medium">IMO Operational Rating:</span>
                 <span className="text-purple-700 font-bold">{carbonTaxDetails.ciiGrade}</span>
               </div>
 
-              <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 text-[10px] text-slate-600 leading-relaxed">
-                {carbonTaxDetails.description}
+              {/* IMO REGULATORY REALITY CALLOUT */}
+              <div className="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200/80 text-[10px] text-amber-900 leading-relaxed mb-2">
+                <strong>⚖️ Regulatory Notice:</strong> {carbonTaxDetails.imoEnforcementText}
+              </div>
+
+              {/* PROJECTED 2027 IMO LEVY SCENARIO */}
+              <div className="px-2.5 py-1.5 rounded-lg bg-purple-50/40 border border-purple-100 flex items-center justify-between text-[10px]">
+                <span className="text-slate-600">Projected 2027 IMO Net-Zero Levy ($100/t):</span>
+                <span className="text-purple-800 font-bold">{carbonTaxDetails.projectedLevy}</span>
               </div>
             </div>
 
@@ -1584,6 +1583,15 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* 7. API SYSTEM DIAGNOSTICS MODAL (KEY: toothfairy) */}
+      {/* ========================================================================= */}
+      <ApiDiagnosticsModal
+        isOpen={isDiagnosticsOpen}
+        onClose={() => setIsDiagnosticsOpen(false)}
+        apiKeys={API_KEYS}
+      />
     </div>
   );
 }

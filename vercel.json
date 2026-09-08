@@ -1,0 +1,20 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/searoutes/:match*",
+      "destination": "https://api.searoutes.com/:match*"
+    },
+    {
+      "source": "/api/climatiq/:match*",
+      "destination": "https://api.climatiq.io/:match*"
+    },
+    {
+      "source": "/api/eia/:match*",
+      "destination": "https://api.eia.gov/:match*"
+    },
+    {
+      "source": "/api/stormglass/:match*",
+      "destination": "https://api.stormglass.io/:match*"
+    }
+  ]
+}
