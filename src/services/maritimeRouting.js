@@ -184,27 +184,8 @@ export function autoCorrectMaritimePath(coords) {
       }
     }
 
-    // 2. IBERIAN PENINSULA & PORTUGAL OFFSHORE CORRIDOR AUTO-CORRECT
-    if (newLat >= 36.8 && newLat <= 43.8 && newLon >= -10.5 && newLon <= -7.5) {
-      if (newLat >= 36.8 && newLat < 37.8) {
-        if (newLon > -9.30) newLon = -9.45;
-      } else if (newLat >= 37.8 && newLat < 39.5) {
-        if (newLon > -9.60) newLon = -9.80;
-      } else if (newLat >= 39.5 && newLat < 41.5) {
-        if (newLon > -9.30) newLon = -9.60;
-      } else if (newLat >= 41.5 && newLat < 42.6) {
-        if (newLon > -9.30) newLon = -9.65;
-      } else if (newLat >= 42.6 && newLat < 43.6) {
-        if (newLon > -9.50) newLon = -9.85;
-      }
-    }
-    // Clears Cabo Prior and Cabo Ortegal into Bay of Biscay
-    if (newLat >= 43.5 && newLat <= 44.1 && newLon > -9.0 && newLon < -7.0) {
-      if (newLat < 44.20) newLat = 44.25;
-    }
-
-    // 3. GIBRALTAR STRAIT (-5.9° to -5.2° lon)
-    if (newLon >= -5.85 && newLon <= -5.25) {
+    // 2. GIBRALTAR STRAIT FAIRWAY (Strictly restricted to Gibraltar Strait bounding box: lat 35.70°N-36.25°N, lon -5.90°W to -5.20°W)
+    if (newLat >= 35.70 && newLat <= 36.25 && newLon >= -5.90 && newLon <= -5.20) {
       if (newLat > 36.05) newLat = 35.98;
       if (newLat < 35.85) newLat = 35.92;
     }

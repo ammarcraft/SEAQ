@@ -913,26 +913,28 @@ export default function App() {
             </Marker>
           )}
 
-          {/* START POINT: CLEAN & ACCURATE MARITIME DEPARTURE ARROW */}
+          {/* START POINT: CLEAN STANDALONE DEPARTURE ARROW (NO CIRCLE) */}
           <Marker longitude={startPort.coords[0]} latitude={startPort.coords[1]} anchor="center">
             <div className="flex flex-col items-center cursor-pointer select-none">
               <div className="px-2.5 py-1 rounded-md bg-white text-[11px] font-medium text-slate-800 shadow-md border border-purple-200 mb-1.5 whitespace-nowrap flex items-center gap-1">
                 <span>Start: {startPort.name}</span>
               </div>
-              <div className="relative flex items-center justify-center">
-                <div className="absolute w-10 h-10 rounded-full bg-purple-500/25 animate-ping pointer-events-none" />
-                <div className="w-8 h-8 rounded-full bg-purple-600 border-2 border-white shadow-xl flex items-center justify-center transition-transform hover:scale-110">
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="w-4 h-4 text-white fill-white transition-transform duration-500"
-                    style={{
-                      transform: `rotate(${departureAngle}deg)`,
-                      transformOrigin: '12px 12px',
-                    }}
-                  >
-                    <path d="M12 3L19 20L12 16.5L5 20L12 3Z" />
-                  </svg>
-                </div>
+              <div
+                className="transition-transform duration-500 filter drop-shadow-[0_2px_10px_rgba(168,85,247,0.9)] hover:scale-110"
+                style={{
+                  transform: `rotate(${departureAngle}deg)`,
+                  transformOrigin: '14px 14px',
+                }}
+              >
+                <svg viewBox="0 0 28 28" className="w-7 h-7">
+                  <path
+                    d="M14 2L25 24L14 19L3 24L14 2Z"
+                    fill="#a855f7"
+                    stroke="#ffffff"
+                    strokeWidth="2"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </div>
             </div>
           </Marker>
