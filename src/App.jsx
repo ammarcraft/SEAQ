@@ -1083,21 +1083,21 @@ export default function App() {
         </div>
       </header>
 
-      {/* FLOATING WEATHER ROUTING & SWELL AVOIDANCE BADGE */}
-      <div className="absolute top-[64px] sm:top-[76px] left-1/2 -translate-x-1/2 z-30 pointer-events-auto flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-slate-900/95 backdrop-blur-md border border-purple-500/40 shadow-2xl text-[10px] sm:text-xs max-w-[96vw] sm:max-w-none">
+      {/* FLOATING WEATHER ROUTING & SWELL AVOIDANCE BADGE (COMPACT & ZERO PANEL OVERLAP) */}
+      <div className="absolute top-[60px] sm:top-[66px] left-1/2 -translate-x-1/2 z-30 pointer-events-auto flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-1.5 rounded-full bg-slate-900/95 backdrop-blur-md border border-purple-500/40 shadow-2xl text-[10px] sm:text-xs max-w-[95vw] sm:max-w-none">
         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
         <span className="text-emerald-400 font-bold whitespace-nowrap">
-          {routeMode === 'eco' ? 'AI Eco-Weather Route:' : 'Direct Track:'}
+          {routeMode === 'eco' ? 'AI Eco Route:' : 'Direct Track:'}
         </span>
-        <span className="text-slate-300 hidden md:inline whitespace-nowrap">
-          {routeMode === 'eco' ? 'Bypassing 4.2m Arabian Swell' : 'Cutting Straight (4.2m Rough Seas)'}
+        <span className="text-slate-300 hidden xl:inline whitespace-nowrap">
+          {routeMode === 'eco' ? 'Bypassing 4.2m Swell' : 'Direct Heavy Seas'}
         </span>
         <span className={`font-semibold whitespace-nowrap ${routeMode === 'eco' ? 'text-purple-300' : 'text-amber-400'}`}>
           {routeMode === 'eco' ? `(+${weatherSavings.fuelSavingsPercent}% Fuel Saved)` : '(+18% Resistance)'}
         </span>
         <button
           onClick={() => setRouteMode(routeMode === 'eco' ? 'direct' : 'eco')}
-          className="ml-1 text-[9px] sm:text-[10px] px-2 py-0.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white font-medium border border-purple-400/40 transition-colors whitespace-nowrap"
+          className="ml-1 text-[9px] sm:text-[10px] px-2 py-0.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white font-medium border border-purple-400/40 transition-colors whitespace-nowrap shadow-sm"
         >
           {routeMode === 'eco' ? 'Compare Direct' : 'Switch to AI Eco'}
         </button>
@@ -1107,7 +1107,7 @@ export default function App() {
       {/* 3. LEFT PANEL: DISPATCH FORM (COLLAPSIBLE TO CLEAR MAP) */}
       {/* ========================================================================= */}
       <div
-        className={`absolute top-24 sm:top-20 bottom-16 sm:bottom-6 z-20 transition-all duration-300 flex items-start ${
+        className={`absolute top-[118px] sm:top-[124px] bottom-16 sm:bottom-6 z-20 transition-all duration-300 flex items-start ${
           isLeftOpen ? 'left-2 right-2 sm:left-6 sm:right-auto sm:w-96' : 'left-0 w-0 pointer-events-none'
         }`}
       >
@@ -1510,7 +1510,7 @@ export default function App() {
       {/* 4. RIGHT PANEL: TELEMETRY + XGBOOST AI FUEL PREDICTION (COLLAPSIBLE) */}
       {/* ========================================================================= */}
       <div
-        className={`absolute top-24 sm:top-20 bottom-16 sm:bottom-6 z-20 transition-all duration-300 flex items-start justify-end ${
+        className={`absolute top-[118px] sm:top-[124px] bottom-16 sm:bottom-6 z-20 transition-all duration-300 flex items-start justify-end ${
           isRightOpen ? 'left-2 right-2 sm:left-auto sm:right-6 sm:w-[430px]' : 'right-0 w-0 pointer-events-none'
         }`}
       >

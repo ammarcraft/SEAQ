@@ -30,14 +30,27 @@ export const SEA_CHOKEPOINTS = {
   SOCOTRA_NORTH: [54.0, 13.0],
   GULF_OF_ADEN: [48.0, 12.5],
   
-  // Red Sea & Suez
-  BAB_EL_MANDEB: [43.35, 12.6],
-  RED_SEA_SOUTH: [41.5, 16.0],
-  RED_SEA_MID: [38.2, 20.5],
-  RED_SEA_NORTH: [34.5, 27.2],
-  GULF_OF_SUEZ: [33.3, 28.3],
-  SUEZ_SOUTH: [32.55, 29.9],
-  SUEZ_NORTH: [32.32, 31.3],
+  // Red Sea & Exact Suez Canal Waterway Centerline (100% Water - Dead center in canal channels & lakes)
+  BAB_EL_MANDEB: [43.35, 12.60],
+  RED_SEA_SOUTH: [41.50, 16.00],
+  RED_SEA_MID: [38.20, 20.50],
+  RED_SEA_NORTH: [34.50, 27.20],
+  GULF_OF_SUEZ_SOUTH: [33.80, 27.85],
+  GULF_OF_SUEZ_MID: [33.10, 28.50],
+  GULF_OF_SUEZ_APPROACH: [32.565, 29.850],
+  PORT_TEWFIK_BASIN: [32.572, 29.935], // Port Tewfik water basin
+  PORT_TEWFIK_CANAL_START: [32.576, 29.970], // Exact water channel of canal entrance
+  SUEZ_SHALUFA_WATERWAY: [32.583, 30.070], // Shalufa canal water channel
+  SUEZ_LITTLE_BITTER_LAKE: [32.610, 30.150], // Little Bitter Lake open water
+  SUEZ_GREAT_BITTER_SOUTH: [32.480, 30.280], // Great Bitter Lake deep fairway
+  SUEZ_GREAT_BITTER_LAKE: [32.360, 30.365], // Great Bitter Lake broad water
+  SUEZ_DEVERSOIR_PASS: [32.320, 30.430], // Deversoir canal channel
+  SUEZ_ISMAILIA_TIMSAH: [32.285, 30.575], // Lake Timsah open water basin
+  SUEZ_BALLAH_BYPASS: [32.315, 30.820], // New Suez Canal bypass channel
+  SUEZ_QANTARA: [32.320, 30.900], // Qantara water channel
+  SUEZ_PORT_SAID_TERMINAL: [32.310, 31.260], // Port Said canal mouth & harbor
+  SUEZ_PORT_SAID_OFFSHORE: [32.330, 31.420], // Mediterranean Sea entrance
+  NILE_DELTA_OFFSHORE: [31.000, 32.200], // Deep Mediterranean Sea fairway
   
   // Mediterranean & Gibraltar
   MED_EAST: [28.0, 33.8],
@@ -243,9 +256,22 @@ export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = t
       P.RED_SEA_SOUTH,
       P.RED_SEA_MID,
       P.RED_SEA_NORTH,
-      P.GULF_OF_SUEZ,
-      P.SUEZ_SOUTH,
-      P.SUEZ_NORTH,
+      P.GULF_OF_SUEZ_SOUTH,
+      P.GULF_OF_SUEZ_MID,
+      P.GULF_OF_SUEZ_APPROACH,
+      P.PORT_TEWFIK_BASIN,
+      P.PORT_TEWFIK_CANAL_START,
+      P.SUEZ_SHALUFA_WATERWAY,
+      P.SUEZ_LITTLE_BITTER_LAKE,
+      P.SUEZ_GREAT_BITTER_SOUTH,
+      P.SUEZ_GREAT_BITTER_LAKE,
+      P.SUEZ_DEVERSOIR_PASS,
+      P.SUEZ_ISMAILIA_TIMSAH,
+      P.SUEZ_BALLAH_BYPASS,
+      P.SUEZ_QANTARA,
+      P.SUEZ_PORT_SAID_TERMINAL,
+      P.SUEZ_PORT_SAID_OFFSHORE,
+      P.NILE_DELTA_OFFSHORE,
       P.MED_EAST,
       P.MED_CENTRAL,
       P.MED_WEST,
@@ -268,9 +294,22 @@ export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = t
       P.RED_SEA_SOUTH,
       P.RED_SEA_MID,
       P.RED_SEA_NORTH,
-      P.GULF_OF_SUEZ,
-      P.SUEZ_SOUTH,
-      P.SUEZ_NORTH,
+      P.GULF_OF_SUEZ_SOUTH,
+      P.GULF_OF_SUEZ_MID,
+      P.GULF_OF_SUEZ_APPROACH,
+      P.PORT_TEWFIK_BASIN,
+      P.PORT_TEWFIK_CANAL_START,
+      P.SUEZ_SHALUFA_WATERWAY,
+      P.SUEZ_LITTLE_BITTER_LAKE,
+      P.SUEZ_GREAT_BITTER_SOUTH,
+      P.SUEZ_GREAT_BITTER_LAKE,
+      P.SUEZ_DEVERSOIR_PASS,
+      P.SUEZ_ISMAILIA_TIMSAH,
+      P.SUEZ_BALLAH_BYPASS,
+      P.SUEZ_QANTARA,
+      P.SUEZ_PORT_SAID_TERMINAL,
+      P.SUEZ_PORT_SAID_OFFSHORE,
+      P.NILE_DELTA_OFFSHORE,
       P.MED_EAST,
       P.MED_CENTRAL,
       P.MED_WEST,
@@ -291,7 +330,20 @@ export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = t
         P.SOCOTRA_NORTH,
         P.BAB_EL_MANDEB,
         P.RED_SEA_MID,
-        P.SUEZ_NORTH,
+        P.GULF_OF_SUEZ_APPROACH,
+        P.PORT_TEWFIK_BASIN,
+        P.PORT_TEWFIK_CANAL_START,
+        P.SUEZ_SHALUFA_WATERWAY,
+        P.SUEZ_LITTLE_BITTER_LAKE,
+        P.SUEZ_GREAT_BITTER_SOUTH,
+        P.SUEZ_GREAT_BITTER_LAKE,
+        P.SUEZ_DEVERSOIR_PASS,
+        P.SUEZ_ISMAILIA_TIMSAH,
+        P.SUEZ_BALLAH_BYPASS,
+        P.SUEZ_QANTARA,
+        P.SUEZ_PORT_SAID_TERMINAL,
+        P.SUEZ_PORT_SAID_OFFSHORE,
+        P.NILE_DELTA_OFFSHORE,
         P.MED_EAST,
         P.MED_WEST,
         P.GIBRALTAR_STRAIT,
