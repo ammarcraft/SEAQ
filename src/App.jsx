@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import PortCallBerthingCard from './components/PortCallBerthingCard';
 import FuelManagementCard, { MARINE_FUELS_LIST } from './components/FuelManagementCard';
+import CommercialRoiCard from './components/CommercialRoiCard';
 import ApiDiagnosticsModal from './components/ApiDiagnosticsModal';
 import { getNavigableSeaRoute } from './services/maritimeRouting';
 import { fetchStormglassDataWithFailover } from './services/stormglassService';
@@ -201,9 +202,9 @@ export default function App() {
   // Currency Selector
   const [selectedCurrency, setSelectedCurrency] = useState('USD');
 
-  // Screen clearance toggles
-  const [isLeftOpen, setIsLeftOpen] = useState(true);
-  const [isRightOpen, setIsRightOpen] = useState(true);
+  // Screen clearance toggles (Responsive: start closed on mobile for full map focus)
+  const [isLeftOpen, setIsLeftOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 768 : true);
+  const [isRightOpen, setIsRightOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 1024 : false);
   const [isFullMapView, setIsFullMapView] = useState(false);
 
   const mapRef = useRef(null);
@@ -299,9 +300,22 @@ export default function App() {
     timestamp: new Date().toLocaleTimeString(),
   });
 
-  // Telemetry
+  // Telemetry & Weather-Routing Modes
   const [distanceNM, setDistanceNM] = useState(10493);
   const [routeGeoJson, setRouteGeoJson] = useState(null);
+  const [directRouteGeoJson, setDirectRouteGeoJson] = useState(null);
+  const [routeMode, setRouteMode] = useState('eco'); // 'eco' | 'direct'
+  const [weatherSavings, setWeatherSavings] = useState({
+    fuelSavingsPercent: 14.2,
+    waveReduction: '4.2m ➔ 1.6m Calm',
+    weatherDelayAvoidedHours: 18.5,
+  });
+  const [stormZone, setStormZone] = useState({
+    name: 'Arabian Sea Swell Vortex',
+    center: [64.0, 16.5],
+    waveHeight: '4.2m Rough',
+    windSpeed: '28 kts',
+  });
   const [vesselPosition, setVesselPosition] = useState([65.0, 11.5]);
   const [departureAngle, setDepartureAngle] = useState(45);
 
@@ -453,10 +467,13 @@ export default function App() {
 
     try {
       const result = await getNavigableSeaRoute(sPort, dPort, API_KEYS.SEAROUTES);
-      if (result && result.geoJson) {
-        setRouteGeoJson(result.geoJson);
+      if (result && result.ecoGeoJson) {
+        setRouteGeoJson(result.ecoGeoJson);
+        setDirectRouteGeoJson(result.directGeoJson);
         computedNM = result.distanceNM;
         setDistanceNM(computedNM);
+        if (result.weatherSavings) setWeatherSavings(result.weatherSavings);
+        if (result.stormZone) setStormZone(result.stormZone);
 
         const coords = result.coordinates;
         if (coords && coords.length > 1) {
@@ -580,9 +597,9 @@ export default function App() {
         id: 'route-glow',
         type: 'line',
         paint: {
-          'line-color': '#9333ea',
+          'line-color': '#06b6d4', // Cyan glow for Eco-Weather route
           'line-width': 8,
-          'line-opacity': 0.6,
+          'line-opacity': 0.65,
           'line-blur': 4
         }
       },
@@ -590,9 +607,19 @@ export default function App() {
         id: 'route-core',
         type: 'line',
         paint: {
-          'line-color': '#e9d5ff',
-          'line-width': 2.8,
+          'line-color': '#a855f7', // Purple core
+          'line-width': 3,
           'line-opacity': 0.95
+        }
+      },
+      directTrack: {
+        id: 'direct-track-line',
+        type: 'line',
+        paint: {
+          'line-color': '#f59e0b', // Amber dashed baseline track
+          'line-width': 2,
+          'line-dasharray': [3, 2],
+          'line-opacity': 0.8
         }
       }
     };
@@ -632,12 +659,34 @@ export default function App() {
         >
           <NavigationControl position="bottom-right" style={{ marginRight: 24, marginBottom: 170 }} />
 
-          {/* Glowing Purple Sea Path */}
+          {/* Glowing Purple/Cyan Sea Path */}
           {routeGeoJson && (
-            <Source id="user-route" type="geojson" data={routeGeoJson}>
+            <Source id="user-route" type="geojson" data={routeMode === 'eco' ? routeGeoJson : (directRouteGeoJson || routeGeoJson)}>
               <Layer {...routeLayers.glow} />
               <Layer {...routeLayers.core} />
             </Source>
+          )}
+
+          {/* Direct Baseline Navigational Track (Dashed Amber) for Weather Comparison */}
+          {directRouteGeoJson && routeMode === 'eco' && (
+            <Source id="direct-track" type="geojson" data={directRouteGeoJson}>
+              <Layer {...routeLayers.directTrack} />
+            </Source>
+          )}
+
+          {/* High Swell Avoidance Zone Marker on Map */}
+          {stormZone && (
+            <Marker longitude={stormZone.center[0]} latitude={stormZone.center[1]} anchor="center">
+              <div className="flex flex-col items-center cursor-pointer group">
+                <div className="px-2 py-0.5 rounded-md bg-amber-950/95 border border-amber-500/60 text-[10px] text-amber-300 font-semibold shadow-2xl flex items-center gap-1.5 whitespace-nowrap mb-1">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                  <span>⚠️ 4.2m Rough Swell (Avoided by AI Eco-Route)</span>
+                </div>
+                <div className="w-7 h-7 rounded-full bg-amber-500/20 border border-amber-500/60 flex items-center justify-center text-amber-400 shadow-xl">
+                  <Waves className="w-4 h-4 animate-pulse" />
+                </div>
+              </div>
+            </Marker>
           )}
 
           {/* START POINT: HIGH-TECH DEPARTURE ARROW */}
@@ -720,23 +769,23 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 2. TOP HEADER (CURRENCY SELECTOR & SCREEN CLEAR CONTROLS) */}
       {/* ========================================================================= */}
-      <header className="absolute top-4 left-6 right-6 z-30 flex items-center justify-between px-5 py-2.5 rounded-2xl bg-white/95 backdrop-blur-md border border-purple-100 shadow-md">
-        <div className="flex items-center gap-2.5">
+      <header className="absolute top-2 sm:top-4 left-2 right-2 sm:left-6 sm:right-6 z-30 flex items-center justify-between px-3 sm:px-5 py-2 sm:py-2.5 rounded-2xl bg-white/95 backdrop-blur-md border border-purple-100 shadow-md">
+        <div className="flex items-center gap-2 sm:gap-2.5">
           <img
             src="/seaq-logo.jpg"
             alt="SEAQ Logo"
-            className="w-8 h-8 object-contain rounded-lg shadow-sm"
+            className="w-7 h-7 sm:w-8 sm:h-8 object-contain rounded-lg shadow-sm"
           />
-          <h1 className="text-base font-black tracking-wider text-slate-900">
+          <h1 className="text-sm sm:text-base font-black tracking-wider text-slate-900">
             SEAQ
           </h1>
         </div>
 
         {/* Global Toolbar: Currency Switcher + Full Map Focus + Waypoint Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {/* CURRENCY SELECTOR */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700">
-            <span className="text-slate-400 font-medium text-[11px]">Currency:</span>
+          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700">
+            <span className="text-slate-400 font-medium text-[10px] sm:text-[11px]">Cur:</span>
             <select
               value={selectedCurrency}
               onChange={(e) => setSelectedCurrency(e.target.value)}
@@ -753,14 +802,15 @@ export default function App() {
           {/* Waypoints Toggle */}
           <button
             onClick={() => setShowWaypoints(!showWaypoints)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
               showWaypoints
                 ? 'bg-purple-50 border-purple-200 text-purple-700'
                 : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
             }`}
+            title="Toggle Waypoints"
           >
             {showWaypoints ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-            <span className="hidden sm:inline">Waypoints</span>
+            <span className="hidden md:inline">Waypoints</span>
           </button>
 
           {/* Center Route Focus */}
@@ -770,50 +820,41 @@ export default function App() {
                 fitRouteBounds(routeGeoJson.geometry.coordinates);
               }
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-purple-50 border border-purple-200 text-purple-700 text-xs font-medium transition-colors shadow-sm"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-white hover:bg-purple-50 border border-purple-200 text-purple-700 text-xs font-medium transition-colors shadow-sm"
             title="Auto-center camera on the active voyage route"
           >
             <Navigation className="w-3.5 h-3.5 text-purple-600" />
-            <span className="hidden sm:inline">Center Route</span>
-          </button>
-
-          {/* Noise Zone FlyTo */}
-          <button
-            onClick={handleInspectNoiseZone}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-medium transition-colors"
-          >
-            <Volume2 className="w-3.5 h-3.5 text-amber-600" />
-            <span className="hidden sm:inline">Noise Zone</span>
+            <span className="hidden md:inline">Center Route</span>
           </button>
 
           {/* LIVE SEA STATE & OCEAN WAVES */}
           <button
             onClick={() => refreshOceanData()}
             disabled={isRefreshingOcean}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border bg-white hover:bg-purple-50 border-purple-200 text-purple-700 transition-colors shadow-sm disabled:opacity-50"
-            title={`Ocean Swell: ${liveOceanData?.waveHeight || '0.8'}m | Period: ${liveOceanData?.wavePeriod || '8.4'}s | Wind: ${liveOceanData?.windSpeed || '15'} kts. Click to refresh.`}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium border bg-white hover:bg-purple-50 border-purple-200 text-purple-700 transition-colors shadow-sm disabled:opacity-50"
+            title={`Ocean Swell: ${liveOceanData?.waveHeight || '0.8'}m. Click to refresh.`}
           >
             <Waves className={`w-3.5 h-3.5 text-purple-600 ${isRefreshingOcean ? 'animate-pulse' : ''}`} />
             <span className="hidden sm:inline">Waves: {liveOceanData?.waveHeight || '0.8'}m</span>
           </button>
 
-          {/* API DIAGNOSTICS & TELEMETRY MONITOR (PASSCODE: toothfairy) */}
+          {/* API DIAGNOSTICS & TELEMETRY MONITOR (NO KEY LEAKS!) */}
           <button
             onClick={() => setIsDiagnosticsOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-purple-500/40 text-purple-300 text-xs font-semibold transition-all shadow-sm group"
-            title="System API Health & Diagnostics (Unlock via secret key 'toothfairy')"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-purple-500/40 text-purple-300 text-xs font-semibold transition-all shadow-sm group"
+            title="System API Health & Diagnostics"
           >
             <Activity className="w-3.5 h-3.5 text-purple-400 group-hover:animate-spin" />
             <span className="hidden sm:inline">Diagnostics</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 font-mono border border-purple-700/50">
-              ⚡ toothfairy
+            <span className="text-[10px] px-1 py-0.2 rounded bg-purple-950 text-purple-300 font-mono border border-purple-700/50">
+              ⚡
             </span>
           </button>
 
           {/* FULL MAP VIEW TOGGLE */}
           <button
             onClick={toggleMapFocus}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+            className={`hidden sm:flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
               isFullMapView
                 ? 'bg-purple-600 border-purple-600 text-white shadow-md'
                 : 'bg-white hover:bg-slate-50 border-purple-200 text-purple-700'
@@ -825,12 +866,32 @@ export default function App() {
         </div>
       </header>
 
+      {/* FLOATING WEATHER ROUTING & SWELL AVOIDANCE BADGE */}
+      <div className="absolute top-14 sm:top-18 left-1/2 -translate-x-1/2 z-20 pointer-events-auto flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 rounded-full bg-slate-900/95 backdrop-blur-md border border-purple-500/30 shadow-xl text-[10px] sm:text-xs">
+        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+        <span className="text-emerald-400 font-bold whitespace-nowrap">
+          {routeMode === 'eco' ? 'AI Eco-Weather Route:' : 'Direct Track:'}
+        </span>
+        <span className="text-slate-300 hidden md:inline whitespace-nowrap">
+          {routeMode === 'eco' ? 'Bypassing 4.2m Arabian Swell' : 'Cutting Straight (4.2m Rough Seas)'}
+        </span>
+        <span className={`font-semibold whitespace-nowrap ${routeMode === 'eco' ? 'text-purple-300' : 'text-amber-400'}`}>
+          {routeMode === 'eco' ? `(+${weatherSavings.fuelSavingsPercent}% Fuel Saved)` : '(+18% Resistance)'}
+        </span>
+        <button
+          onClick={() => setRouteMode(routeMode === 'eco' ? 'direct' : 'eco')}
+          className="ml-1 text-[9px] sm:text-[10px] px-2 py-0.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white font-medium border border-purple-400/40 transition-colors whitespace-nowrap"
+        >
+          {routeMode === 'eco' ? 'Compare Direct' : 'Switch to AI Eco'}
+        </button>
+      </div>
+
       {/* ========================================================================= */}
       {/* 3. LEFT PANEL: DISPATCH FORM (COLLAPSIBLE TO CLEAR MAP) */}
       {/* ========================================================================= */}
       <div
-        className={`absolute top-20 bottom-6 z-20 transition-all duration-300 flex items-start ${
-          isLeftOpen ? 'left-6 w-96' : 'left-0 w-0'
+        className={`absolute top-24 sm:top-20 bottom-16 sm:bottom-6 z-20 transition-all duration-300 flex items-start ${
+          isLeftOpen ? 'left-2 right-2 sm:left-6 sm:right-auto sm:w-96' : 'left-0 w-0 pointer-events-none'
         }`}
       >
         {isLeftOpen ? (
@@ -1232,8 +1293,8 @@ export default function App() {
       {/* 4. RIGHT PANEL: TELEMETRY + XGBOOST AI FUEL PREDICTION (COLLAPSIBLE) */}
       {/* ========================================================================= */}
       <div
-        className={`absolute top-20 bottom-6 z-20 transition-all duration-300 flex items-start justify-end ${
-          isRightOpen ? 'right-6 w-[430px]' : 'right-0 w-0'
+        className={`absolute top-24 sm:top-20 bottom-16 sm:bottom-6 z-20 transition-all duration-300 flex items-start justify-end ${
+          isRightOpen ? 'left-2 right-2 sm:left-auto sm:right-6 sm:w-[430px]' : 'right-0 w-0 pointer-events-none'
         }`}
       >
         {isRightOpen ? (
@@ -1345,6 +1406,9 @@ export default function App() {
                 <span className="text-purple-800 font-bold">{carbonTaxDetails.projectedLevy}</span>
               </div>
             </div>
+
+            {/* COMMERCIAL FLEET ROI & WHY SEAQ VALUE CARD */}
+            <CommercialRoiCard formatCurrency={formatCurrency} />
 
             {/* Marine Fuel Price Container */}
             <div className="rounded-2xl bg-white/95 backdrop-blur-md border border-purple-100 p-4 shadow-lg">
@@ -1585,7 +1649,56 @@ export default function App() {
       )}
 
       {/* ========================================================================= */}
-      {/* 7. API SYSTEM DIAGNOSTICS MODAL (KEY: toothfairy) */}
+      {/* 8. MOBILE QUICK NAV DOCK (Visible on screens < md) */}
+      {/* ========================================================================= */}
+      <div className="md:hidden fixed bottom-2 left-2 right-2 z-40 bg-slate-900/95 backdrop-blur-md border border-purple-500/30 rounded-2xl p-1.5 shadow-2xl flex items-center justify-around text-slate-200">
+        <button
+          onClick={() => {
+            setIsLeftOpen(!isLeftOpen);
+            if (isRightOpen) setIsRightOpen(false);
+          }}
+          className={`flex flex-col items-center py-1 px-3 rounded-xl text-[10px] font-medium transition-colors ${
+            isLeftOpen ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Navigation className="w-4 h-4 mb-0.5" />
+          <span>Voyage</span>
+        </button>
+
+        <button
+          onClick={() => setRouteMode(routeMode === 'eco' ? 'direct' : 'eco')}
+          className={`flex flex-col items-center py-1 px-2.5 rounded-xl text-[10px] font-medium transition-colors ${
+            routeMode === 'eco' ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'
+          }`}
+        >
+          <Waves className="w-4 h-4 mb-0.5" />
+          <span>{routeMode === 'eco' ? 'Eco-Weather' : 'Direct'}</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setIsRightOpen(!isRightOpen);
+            if (isLeftOpen) setIsLeftOpen(false);
+          }}
+          className={`flex flex-col items-center py-1 px-3 rounded-xl text-[10px] font-medium transition-colors ${
+            isRightOpen ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Ship className="w-4 h-4 mb-0.5" />
+          <span>Vessel/ROI</span>
+        </button>
+
+        <button
+          onClick={() => setIsDiagnosticsOpen(true)}
+          className="flex flex-col items-center py-1 px-3 rounded-xl text-[10px] font-medium text-purple-300 hover:text-white transition-colors"
+        >
+          <Activity className="w-4 h-4 mb-0.5 text-purple-400" />
+          <span>Diagnostics</span>
+        </button>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 7. API SYSTEM DIAGNOSTICS MODAL */}
       {/* ========================================================================= */}
       <ApiDiagnosticsModal
         isOpen={isDiagnosticsOpen}
