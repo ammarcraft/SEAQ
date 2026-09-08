@@ -19,8 +19,16 @@ export const SEA_CHOKEPOINTS = {
   MALACCA_STRAIT: [100.2, 4.2],
   MALACCA_WEST: [96.0, 5.5],
   
-  // Indian Ocean & Arabian Sea
+  // Indian Ocean, Arabian Sea & Subcontinent Fairways (100% Waterway - Never crosses Indian mainland)
+  MUMBAI_OFFSHORE: [72.20, 18.80],
+  GOA_OFFSHORE: [73.20, 15.00],
+  MANGALORE_OFFSHORE: [74.20, 12.80],
+  COCHIN_OFFSHORE: [75.50, 9.80],
+  CAPE_COMORIN_OFFSHORE: [77.30, 7.50], // Deep water south of Kanyakumari
   SRI_LANKA_SOUTH: [80.5, 5.8],
+  SRI_LANKA_EAST: [82.50, 7.50],
+  BAY_OF_BENGAL_MID: [85.00, 12.00],
+  NICOBAR_CHANNEL: [94.00, 6.00],
   ARABIAN_SEA_EAST: [71.5, 17.5],
   ARABIAN_SEA_MID: [64.0, 13.0],
   ARABIAN_SEA_CALM_SOUTH: [63.0, 10.5], // AI Weather Avoidance Waypoint (Calm water)
@@ -477,7 +485,64 @@ export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = t
     if (!isSouthToNorth) leg.reverse();
     leg.forEach(add);
   }
-  // SCENARIO 6: Transpacific (Asia <-> US West Coast)
+  // SCENARIO 6: India / Arabian Sea <-> East Asia / Southeast Asia (Singapore, Malacca, China, Japan)
+  else if ((isStartIndiaOrArabian && isDestEastAsia) || (isStartEastAsia && isDestIndiaOrArabian)) {
+    const isReverse = isStartEastAsia;
+    const leg = [];
+
+    // If starting on West Coast of India or Arabian Sea / Persian Gulf (lon < 78.5)
+    const isWestCoast = (isReverse ? destLon : startLon) < 78.5;
+    if (isWestCoast) {
+      leg.push(
+        P.MUMBAI_OFFSHORE,
+        P.GOA_OFFSHORE,
+        P.MANGALORE_OFFSHORE,
+        P.COCHIN_OFFSHORE,
+        P.CAPE_COMORIN_OFFSHORE,
+        P.SRI_LANKA_SOUTH
+      );
+    } else {
+      leg.push(P.BAY_OF_BENGAL_MID);
+    }
+
+    // Traverse across to Malacca & Singapore
+    leg.push(
+      P.NICOBAR_CHANNEL,
+      P.MALACCA_WEST,
+      P.MALACCA_STRAIT,
+      P.SINGAPORE_STRAIT
+    );
+
+    // If destined further north into China / Japan / Korea (targetLat > 12)
+    const targetLat = isReverse ? startLat : destLat;
+    if (targetLat > 12) {
+      leg.push(
+        P.SOUTH_CHINA_SEA_SOUTH,
+        P.SOUTH_CHINA_SEA_NORTH,
+        P.TAIWAN_STRAIT,
+        P.EAST_CHINA_SEA
+      );
+    }
+
+    if (isReverse) leg.reverse();
+    leg.forEach(add);
+  }
+  // SCENARIO 7: Intra-India Subcontinent Coastal (West Coast <-> East Coast around Sri Lanka)
+  else if (isStartIndiaOrArabian && isDestIndiaOrArabian) {
+    const isWestToEast = startLon < destLon;
+    const leg = [
+      P.MUMBAI_OFFSHORE,
+      P.GOA_OFFSHORE,
+      P.MANGALORE_OFFSHORE,
+      P.COCHIN_OFFSHORE,
+      P.CAPE_COMORIN_OFFSHORE,
+      P.SRI_LANKA_SOUTH,
+      P.SRI_LANKA_EAST
+    ];
+    if (!isWestToEast) leg.reverse();
+    leg.forEach(add);
+  }
+  // SCENARIO 8: Transpacific (Asia <-> US West Coast)
   else if ((isStartEastAsia && isDestAmericasWest) || (isStartAmericasWest && isDestEastAsia)) {
     add(P.EAST_CHINA_SEA);
     add(P.PACIFIC_NW);

@@ -769,9 +769,13 @@ export default function App() {
   }, [startPort, destPort, selectedShip, cargoWeight, refreshOceanData, fitRouteBounds]);
 
   useEffect(() => {
+    window.__calculateRoute = calculateRoute;
+    window.__setStartPort = (p) => { setStartPort(p); setStartQuery(p.name); };
+    window.__setDestPort = (p) => { setDestPort(p); setDestQuery(p.name); };
+    window.__GLOBAL_PORTS = GLOBAL_PORTS;
     calculateRoute();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [calculateRoute]);
 
   const transitHours = distanceNM / selectedShip.speedKts;
   const transitDays = (transitHours / 24).toFixed(1);
