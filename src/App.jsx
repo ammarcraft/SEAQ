@@ -74,9 +74,10 @@ const QUICK_COUNTRIES = [
 ];
 
 // ==========================================
-// SHIP SPECIFICATIONS & XGBOOST FUEL MATRIX
+// EXPANDED COMMERCIAL FLEET MATRIX (18 NAVAL VESSEL TYPES)
 // ==========================================
 const SHIP_TYPES = [
+  // --- CONTAINER FLEET ---
   {
     id: 'ULCV',
     name: 'Ultra Large Container Vessel (ULCV)',
@@ -92,7 +93,7 @@ const SHIP_TYPES = [
     xgboostReason: 'Balances thermal 2-stroke diesel efficiency with 26% carbon tax reduction.',
     estimatedFuelSavingsUsd: 68400,
     climatiqActivity: 'sea_freight-vessel_type_vehicle_carrier-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
-    description: 'Long-haul container carrier for major oceanic trading corridors.'
+    description: 'Flagship mega-container carrier for high-volume oceanic corridors (Asia-Europe/Transpacific).'
   },
   {
     id: 'PANAMAX_CONT',
@@ -109,63 +110,29 @@ const SHIP_TYPES = [
     xgboostReason: 'Optimal for coastal emission control areas and zero-soot port calls.',
     estimatedFuelSavingsUsd: 52100,
     climatiqActivity: 'sea_freight-vessel_type_vehicle_carrier-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
-    description: 'Medium container carrier configured for global canal locks.'
+    description: 'Modern post-Panamax beam carrier built for expanded locks and transcontinental lines.'
   },
   {
-    id: 'CAPESIZE_BULK',
-    name: 'Capesize Bulk Carrier',
-    category: 'Dry Bulk',
-    capacity: '180,000 DWT',
-    defaultCargoTonnes: 45000,
-    speedKts: 13.5,
-    baseRpm: 76,
-    dailyFuelMt: 42,
-    standardFuel: 'HFO 3.5% (Heavy Fuel Oil + Scrubber)',
-    xgboostPredictedFuel: 'VLSFO 0.5% Low-Emission Grade',
-    xgboostConfidence: '95.1%',
-    xgboostReason: 'Avoids heavy particulate surcharges across sensitive maritime passages.',
-    estimatedFuelSavingsUsd: 38200,
-    climatiqActivity: 'sea_freight-vessel_type_bulk_carrier-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
-    description: 'Dry mineral and bulk commodity vessel.'
-  },
-  {
-    id: 'VLCC_TANKER',
-    name: 'Very Large Crude Carrier (VLCC)',
-    category: 'Tanker',
-    capacity: '300,000 DWT (~2M Barrels)',
-    defaultCargoTonnes: 50000,
-    speedKts: 14.5,
-    baseRpm: 82,
-    dailyFuelMt: 58,
-    standardFuel: 'VLSFO 0.5% Standard Marine',
-    xgboostPredictedFuel: 'B24 Bio-Fuel Marine Compound',
-    xgboostConfidence: '95.8%',
-    xgboostReason: 'High torque load optimization ensuring compliance with IMO Net-Zero targets.',
-    estimatedFuelSavingsUsd: 61000,
-    climatiqActivity: 'sea_freight-vessel_type_tanker-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
-    description: 'Crude oil carrier for international petroleum transport.'
-  },
-  {
-    id: 'LNG_CARRIER',
-    name: 'LNG Membrane Tanker',
-    category: 'Gas Carrier',
-    capacity: '216,000 m³ Cryogenic',
-    defaultCargoTonnes: 25000,
-    speedKts: 19.0,
-    baseRpm: 90,
-    dailyFuelMt: 68,
-    standardFuel: 'LNG Boil-Off Gas (Cryogenic Methane)',
-    xgboostPredictedFuel: 'Bio-LNG + Sub-Cooled MGO Dual',
-    xgboostConfidence: '97.6%',
-    xgboostReason: 'Minimizes methane slip during voyage while achieving near-zero sulfur emissions.',
-    estimatedFuelSavingsUsd: 74500,
-    climatiqActivity: 'sea_freight-vessel_type_tanker-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
-    description: 'Liquefied gas transport with dual-fuel propulsion.'
+    id: 'POST_PANAMAX_CONT',
+    name: 'Post-Panamax Container Carrier',
+    category: 'Container',
+    capacity: '8,500 TEU / 95,000 DWT',
+    defaultCargoTonnes: 18000,
+    speedKts: 19.2,
+    baseRpm: 94,
+    dailyFuelMt: 62,
+    standardFuel: 'VLSFO 0.5% Marine Bunker',
+    xgboostPredictedFuel: 'Bio-LNG + Pilot MGO Compound',
+    xgboostConfidence: '93.8%',
+    xgboostReason: 'High-combustion pressure dual-fuel setup mitigating methane slip by 91%.',
+    estimatedFuelSavingsUsd: 44300,
+    climatiqActivity: 'sea_freight-vessel_type_vehicle_carrier-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
+    description: 'Workhorse intermediate container carrier serving high-traffic regional hubs.'
   },
   {
     id: 'FEEDERMAX',
-    name: 'FeederMax Container Ship',
-    category: 'Feeder',
+    name: 'FeederMax Coastal Container',
+    category: 'Container',
     capacity: '2,800 TEU / 35,000 DWT',
     defaultCargoTonnes: 12000,
     speedKts: 17.0,
@@ -174,10 +141,256 @@ const SHIP_TYPES = [
     standardFuel: 'Marine Gas Oil (DMA 0.1% MGO)',
     xgboostPredictedFuel: 'Hydrotreated Vegetable Oil (HVO100)',
     xgboostConfidence: '93.5%',
-    xgboostReason: '100% synthetic drop-in renewable diesel engineered for regional turnaround.',
+    xgboostReason: '100% synthetic drop-in renewable diesel engineered for regional turnaround and zero ECA soot.',
     estimatedFuelSavingsUsd: 29400,
     climatiqActivity: 'sea_freight-vessel_type_vehicle_carrier-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
-    description: 'Regional feeder vessel connecting hub ports with coastal terminals.'
+    description: 'Shuttle feeder vessel linking transshipment mega-terminals with smaller regional ports.'
+  },
+
+  // --- TANKER & LIQUID BULK FLEET ---
+  {
+    id: 'VLCC_TANKER',
+    name: 'Very Large Crude Carrier (VLCC)',
+    category: 'Tanker',
+    capacity: '300,000 DWT (~2.1M Barrels)',
+    defaultCargoTonnes: 50000,
+    speedKts: 14.5,
+    baseRpm: 82,
+    dailyFuelMt: 58,
+    standardFuel: 'VLSFO 0.5% Heavy Marine',
+    xgboostPredictedFuel: 'B24 Bio-Fuel Marine Compound',
+    xgboostConfidence: '95.8%',
+    xgboostReason: 'Delivers peak torque loading while satisfying IMO 2030 Carbon Intensity Indicator (CII) targets.',
+    estimatedFuelSavingsUsd: 61000,
+    climatiqActivity: 'sea_freight-vessel_type_tanker-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
+    description: 'Super-tanker transporting bulk unrefined crude oil on long-haul deepsea trade lanes.'
+  },
+  {
+    id: 'SUEZMAX_TANKER',
+    name: 'Suezmax Crude Tanker',
+    category: 'Tanker',
+    capacity: '160,000 DWT (~1M Barrels)',
+    defaultCargoTonnes: 40000,
+    speedKts: 14.0,
+    baseRpm: 84,
+    dailyFuelMt: 46,
+    standardFuel: 'VLSFO 0.5% Marine Fuel',
+    xgboostPredictedFuel: 'E-Methanol Dual-Fuel Injection',
+    xgboostConfidence: '94.6%',
+    xgboostReason: 'Full draft canal passage capability with zero SOx scrubber washwater restrictions.',
+    estimatedFuelSavingsUsd: 48700,
+    climatiqActivity: 'sea_freight-vessel_type_tanker-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
+    description: 'Medium-large crude tanker sized for full-load transit through the Suez Canal.'
+  },
+  {
+    id: 'AFRAMAX_TANKER',
+    name: 'Aframax / LR2 Product Tanker',
+    category: 'Tanker',
+    capacity: '115,000 DWT (Clean/Dirty Products)',
+    defaultCargoTonnes: 35000,
+    speedKts: 14.2,
+    baseRpm: 86,
+    dailyFuelMt: 38,
+    standardFuel: 'Low-Sulfur Marine Gas Oil (MGO)',
+    xgboostPredictedFuel: 'Green Ammonia (NH3) Dual-Fuel',
+    xgboostConfidence: '92.4%',
+    xgboostReason: 'Zero-carbon chemical footprint ideal for regional refined oil and chemical products.',
+    estimatedFuelSavingsUsd: 42500,
+    climatiqActivity: 'sea_freight-vessel_type_tanker-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
+    description: 'Versatile product tanker for regional crude, fuel oil, and clean petroleum distillate trade.'
+  },
+  {
+    id: 'MR2_PRODUCT',
+    name: 'MR2 Chemical & Product Tanker',
+    category: 'Tanker',
+    capacity: '50,000 DWT (Medium Range)',
+    defaultCargoTonnes: 20000,
+    speedKts: 13.8,
+    baseRpm: 92,
+    dailyFuelMt: 24,
+    standardFuel: 'VLSFO 0.5% Low-Sulfur',
+    xgboostPredictedFuel: 'B30 Bio-Diesel Drop-In Blend',
+    xgboostConfidence: '95.0%',
+    xgboostReason: 'Immediate plug-and-play compliance without cryogenic retrofits for coastal bunkering.',
+    estimatedFuelSavingsUsd: 27800,
+    climatiqActivity: 'sea_freight-vessel_type_tanker-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
+    description: 'Flexible medium-range tanker for refined gasoline, jet fuel, diesel, and vegetable oils.'
+  },
+  {
+    id: 'CHEM_TANKER_IMO2',
+    name: 'IMO II/III Specialized Chemical Tanker',
+    category: 'Chemical',
+    capacity: '38,000 DWT (Stainless / Epoxy Coated)',
+    defaultCargoTonnes: 16000,
+    speedKts: 13.5,
+    baseRpm: 96,
+    dailyFuelMt: 22,
+    standardFuel: 'Marine Gas Oil (DMA 0.1% MGO)',
+    xgboostPredictedFuel: 'Bio-Methanol Clean Propulsion',
+    xgboostConfidence: '93.2%',
+    xgboostReason: 'Strict volatile organic compound (VOC) vapor abatement and zero sulfur contamination.',
+    estimatedFuelSavingsUsd: 25300,
+    climatiqActivity: 'sea_freight-vessel_type_tanker-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
+    description: 'High-spec parcel tanker designed to transport hazardous liquid chemicals and specialty acids.'
+  },
+
+  // --- GAS CARRIER FLEET ---
+  {
+    id: 'LNG_CARRIER',
+    name: 'LNG Membrane Cryogenic Carrier',
+    category: 'Gas Carrier',
+    capacity: '216,000 m³ Cryogenic Methane',
+    defaultCargoTonnes: 25000,
+    speedKts: 19.0,
+    baseRpm: 90,
+    dailyFuelMt: 68,
+    standardFuel: 'LNG Boil-Off Gas (Cryogenic Methane)',
+    xgboostPredictedFuel: 'Bio-LNG + Sub-Cooled MGO Dual',
+    xgboostConfidence: '97.6%',
+    xgboostReason: 'Minimizes boil-off venting while eliminating 99% of particulate and SOx emissions.',
+    estimatedFuelSavingsUsd: 74500,
+    climatiqActivity: 'sea_freight-vessel_type_tanker-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
+    description: 'Large-scale liquefied natural gas carrier with vacuum-insulated membrane containment tanks.'
+  },
+  {
+    id: 'ARC7_ICE_LNG',
+    name: 'Arc7 Arctic Ice-Class LNG Carrier',
+    category: 'Gas Carrier',
+    capacity: '172,600 m³ (Yamal / Northern Sea Route)',
+    defaultCargoTonnes: 24000,
+    speedKts: 17.5,
+    baseRpm: 94,
+    dailyFuelMt: 72,
+    standardFuel: 'LNG Boil-Off + Heavy Arctic Diesel',
+    xgboostPredictedFuel: 'Ultra-Low Temperature Bio-LNG Blend',
+    xgboostConfidence: '96.1%',
+    xgboostReason: 'Extreme freeze resistance (-52°C) with podded azipod propulsion through 2.1m polar pack ice.',
+    estimatedFuelSavingsUsd: 78200,
+    climatiqActivity: 'sea_freight-vessel_type_tanker-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
+    description: 'Reinforced double-acting icebreaker LNG carrier navigating the Siberian Northern Sea Route.'
+  },
+  {
+    id: 'VLGC_GAS',
+    name: 'Very Large Gas Carrier (VLGC)',
+    category: 'Gas Carrier',
+    capacity: '84,000 m³ (LPG & Liquid Ammonia)',
+    defaultCargoTonnes: 22000,
+    speedKts: 16.5,
+    baseRpm: 88,
+    dailyFuelMt: 44,
+    standardFuel: 'LPG Dual-Fuel / VLSFO',
+    xgboostPredictedFuel: 'Green Ammonia (NH3) Carrier-Grade',
+    xgboostConfidence: '94.8%',
+    xgboostReason: 'Uses self-transported zero-carbon liquid ammonia as direct engine combustion fuel.',
+    estimatedFuelSavingsUsd: 51600,
+    climatiqActivity: 'sea_freight-vessel_type_tanker-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
+    description: 'Refrigerated pressurized carrier transporting butane, propane, and green energy ammonia.'
+  },
+
+  // --- DRY BULK & GENERAL CARGO ---
+  {
+    id: 'CAPESIZE_BULK',
+    name: 'Capesize Deepwater Bulk Carrier',
+    category: 'Dry Bulk',
+    capacity: '180,000 DWT (Iron Ore & Coal)',
+    defaultCargoTonnes: 45000,
+    speedKts: 13.5,
+    baseRpm: 76,
+    dailyFuelMt: 42,
+    standardFuel: 'HFO 3.5% (Heavy Fuel Oil + Scrubber)',
+    xgboostPredictedFuel: 'VLSFO 0.5% Low-Emission Grade',
+    xgboostConfidence: '95.1%',
+    xgboostReason: 'Avoids heavy open-loop scrubber discharge penalties in coastal European EU ETS waters.',
+    estimatedFuelSavingsUsd: 38200,
+    climatiqActivity: 'sea_freight-vessel_type_bulk_carrier-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
+    description: 'Deep-draft bulk carrier transporting iron ore and raw minerals too large for canal transit.'
+  },
+  {
+    id: 'KAMSARMAX_BULK',
+    name: 'Panamax / Kamsarmax Bulker',
+    category: 'Dry Bulk',
+    capacity: '82,000 DWT',
+    defaultCargoTonnes: 30000,
+    speedKts: 13.8,
+    baseRpm: 80,
+    dailyFuelMt: 28,
+    standardFuel: 'VLSFO 0.5% Marine Fuel',
+    xgboostPredictedFuel: 'B20 Bio-Marine Fuel',
+    xgboostConfidence: '93.9%',
+    xgboostReason: 'Cost-effective grain, coal, and bauxite carriage compliant with IMO GHG Strategy 2030.',
+    estimatedFuelSavingsUsd: 31200,
+    climatiqActivity: 'sea_freight-vessel_type_bulk_carrier-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
+    description: 'Optimized length dry bulk ship designed for the bauxite terminal of Port Kamsar.'
+  },
+  {
+    id: 'SUPRAMAX_BULK',
+    name: 'Supramax / Ultramax Geared Bulker',
+    category: 'Dry Bulk',
+    capacity: '64,000 DWT (Self-Discharging Cranes)',
+    defaultCargoTonnes: 22000,
+    speedKts: 14.0,
+    baseRpm: 85,
+    dailyFuelMt: 23,
+    standardFuel: 'VLSFO 0.5% Low-Sulfur',
+    xgboostPredictedFuel: 'Hydrotreated Vegetable Oil (HVO100)',
+    xgboostConfidence: '94.1%',
+    xgboostReason: 'Self-unloading crane flexibility paired with near-zero fossil carbon emissions in port.',
+    estimatedFuelSavingsUsd: 26700,
+    climatiqActivity: 'sea_freight-vessel_type_bulk_carrier-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
+    description: 'Equipped with 4 deck cranes and grabs for independent discharge at unequipped ports.'
+  },
+  {
+    id: 'HANDYSIZE_CARGO',
+    name: 'Handysize General Cargo Vessel',
+    category: 'General Cargo',
+    capacity: '38,000 DWT (Breakbulk & Timber)',
+    defaultCargoTonnes: 14000,
+    speedKts: 13.2,
+    baseRpm: 90,
+    dailyFuelMt: 17,
+    standardFuel: 'Marine Gas Oil (DMA 0.1% MGO)',
+    xgboostPredictedFuel: 'B30 Bio-Fuel Blend',
+    xgboostConfidence: '92.8%',
+    xgboostReason: 'Maneuverable shallow draft with reduced slip and lower carbon dues in shallow ports.',
+    estimatedFuelSavingsUsd: 19800,
+    climatiqActivity: 'sea_freight-vessel_type_bulk_carrier-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
+    description: 'Shallow-draft general cargo carrier for steel, grain, timber, and specialized project cargo.'
+  },
+
+  // --- SPECIALIZED FLEET (RO-RO & REEFER) ---
+  {
+    id: 'PCTC_RORO',
+    name: 'Pure Car & Truck Carrier (PCTC / Ro-Ro)',
+    category: 'Ro-Ro',
+    capacity: '7,500 CEU (Car Equivalent Units)',
+    defaultCargoTonnes: 18000,
+    speedKts: 19.5,
+    baseRpm: 96,
+    dailyFuelMt: 54,
+    standardFuel: 'VLSFO 0.5% Marine Fuel',
+    xgboostPredictedFuel: 'Bio-LNG Dual-Fuel / Wind Assist Ready',
+    xgboostConfidence: '95.5%',
+    xgboostReason: 'Aerodynamic high-freeboard hull optimized for low carbon index on automotive corridors.',
+    estimatedFuelSavingsUsd: 58400,
+    climatiqActivity: 'sea_freight-vessel_type_vehicle_carrier-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
+    description: 'Multi-deck roll-on/roll-off vessel for global export of electric vehicles, trucks, and machinery.'
+  },
+  {
+    id: 'REEFER_CARGO',
+    name: 'Refrigerated Cargo Carrier (Reefer)',
+    category: 'Reefer',
+    capacity: '16,000 DWT (650,000 cu ft Insulated)',
+    defaultCargoTonnes: 10000,
+    speedKts: 18.5,
+    baseRpm: 104,
+    dailyFuelMt: 42,
+    standardFuel: 'Low-Sulfur Marine Gas Oil (MGO)',
+    xgboostPredictedFuel: 'Green E-Methanol Cold-Chain Dual',
+    xgboostConfidence: '94.0%',
+    xgboostReason: 'Maintains continuous -25°C deep-freeze holds with zero generator emissions in green ports.',
+    estimatedFuelSavingsUsd: 36500,
+    climatiqActivity: 'sea_freight-vessel_type_vehicle_carrier-route_type_na-vessel_length_na-tonnage_na-fuel_source_na',
+    description: 'High-speed temperature-controlled perishable food and pharmaceutical carrier.'
   }
 ];
 
@@ -208,6 +421,10 @@ export default function App() {
   const [isFullMapView, setIsFullMapView] = useState(false);
 
   const mapRef = useRef(null);
+
+  useEffect(() => {
+    window.__mapRef = mapRef;
+  }, []);
 
   const fitRouteBounds = useCallback(
     (coords) => {
@@ -867,7 +1084,7 @@ export default function App() {
       </header>
 
       {/* FLOATING WEATHER ROUTING & SWELL AVOIDANCE BADGE */}
-      <div className="absolute top-14 sm:top-18 left-1/2 -translate-x-1/2 z-20 pointer-events-auto flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 rounded-full bg-slate-900/95 backdrop-blur-md border border-purple-500/30 shadow-xl text-[10px] sm:text-xs">
+      <div className="absolute top-[64px] sm:top-[76px] left-1/2 -translate-x-1/2 z-30 pointer-events-auto flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-slate-900/95 backdrop-blur-md border border-purple-500/40 shadow-2xl text-[10px] sm:text-xs max-w-[96vw] sm:max-w-none">
         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
         <span className="text-emerald-400 font-bold whitespace-nowrap">
           {routeMode === 'eco' ? 'AI Eco-Weather Route:' : 'Direct Track:'}

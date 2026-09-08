@@ -5,6 +5,7 @@
  * 1. AI Eco-Weather Optimized Route (Smooth curved passage avoiding high swells, saving ~14% fuel)
  * 2. Baseline Direct Navigational Track (Straight passage cutting through heavy sea states)
  * 3. 100% Waterway guarantee (Suez, Gibraltar, Malacca, Panama, Arctic) - NEVER crosses land!
+ * Strictly preserves offshore fairways around Portugal, Galicia, and all continental landmasses.
  */
 
 // Key International Maritime Chokepoints & Fairways (Longitude, Latitude)
@@ -44,22 +45,31 @@ export const SEA_CHOKEPOINTS = {
   MED_MALTA: [14.5, 36.0],
   MED_WEST: [2.0, 37.0],
   ALBORAN_SEA: [-3.0, 36.0],
-  GIBRALTAR_STRAIT: [-5.6, 35.95],
+  GIBRALTAR_STRAIT: [-5.60, 35.95],
   
-  // Atlantic European Coast (Portugal, Spain, France, UK)
-  CABO_SAO_VICENTE: [-9.1, 36.9],
-  PORTUGAL_SINES_OFFSHORE: [-9.1, 37.95],
-  PORTUGAL_LISBON_OFFSHORE: [-9.6, 38.7],
-  PORTUGAL_LEIXOES_OFFSHORE: [-9.2, 41.2],
-  CABO_FINISTERRE: [-9.6, 43.0],
-  BAY_OF_BISCAY: [-6.0, 45.5],
-  BAY_OF_BISCAY_CALM_WEST: [-9.5, 46.5], // AI Weather Avoidance
-  USHANT_BREST: [-5.5, 48.5],
-  ENGLISH_CHANNEL_WEST: [-3.0, 49.6],
-  ENGLISH_CHANNEL_MID: [-0.5, 50.2],
-  DOVER_STRAIT: [1.5, 51.1],
-  ROTTERDAM_APPROACH: [3.8, 52.0],
-  GERMAN_BIGHT: [7.8, 54.0],
+  // Atlantic European Coast & Iberian TSS Corridor (Strict Deepwater Ocean - ZERO Land Traversal)
+  GULF_OF_CADIZ_OFFSHORE: [-7.50, 36.30],
+  CABO_SAO_VICENTE_OFFSHORE: [-9.45, 36.85],
+  PORTUGAL_SINES_OFFSHORE: [-9.50, 37.95],
+  PORTUGAL_LISBON_OFFSHORE: [-9.85, 38.75], // Deep ocean, 18 NM west of Cabo da Roca (-9.50°)
+  CABO_CARVOEIRO_OFFSHORE: [-9.80, 39.40],  // 20 NM west of Peniche
+  PORTUGAL_PORTO_OFFSHORE: [-9.55, 41.25],   // 40 NM west of Porto / Leixões
+  VIANA_DO_CASTELO_OFFSHORE: [-9.55, 41.85], // Off Northern Portugal
+  VIGO_RIAS_BAIXAS_OFFSHORE: [-9.65, 42.25], // Off Galicia
+  CABO_FINISTERRE_OFFSHORE: [-9.85, 43.05],  // 25 NM west of Cabo Finisterre corner
+  CABO_VILAN_OFFSHORE: [-9.70, 43.40],
+  CORUNA_CABO_PRIOR: [-8.85, 43.90],         // North of A Coruña
+  CABO_ORTEGAL_NORTH: [-7.85, 44.25],        // Clears all Iberian headlands into Bay of Biscay
+  
+  // Bay of Biscay & Northern Europe
+  BAY_OF_BISCAY_WEST: [-6.00, 46.50],        // Direct Baseline Track
+  BAY_OF_BISCAY_CALM_WEST: [-8.50, 46.80],   // AI Eco-Weather Avoidance (Deeper offshore)
+  USHANT_BREST_TSS: [-5.60, 48.55],
+  ENGLISH_CHANNEL_WEST: [-3.80, 49.60],
+  ENGLISH_CHANNEL_MID: [-0.50, 50.20],
+  DOVER_STRAIT: [1.50, 51.10],
+  ROTTERDAM_APPROACH: [3.80, 52.00],
+  GERMAN_BIGHT: [7.80, 54.00],
   
   // Arctic & Northern Waters
   NORTH_SEA_NORTH: [2.0, 58.0],
@@ -112,7 +122,7 @@ export function computeNauticalMiles(coords) {
  * Smooths waypoints with cubic Catmull-Rom spline interpolation
  * Converts sharp straight angles into realistic oceanic curved navigation tracks.
  */
-export function smoothNauticalPath(points, segmentsPerCurve = 5) {
+export function smoothNauticalPath(points, segmentsPerCurve = 4) {
   if (!points || points.length <= 2) return points;
 
   const result = [];
@@ -153,6 +163,33 @@ export function smoothNauticalPath(points, segmentsPerCurve = 5) {
 }
 
 /**
+ * Complete Iberian Atlantic Deepwater Fairway (South to North)
+ * Rounds Portugal and Northern Spain with 100% deep ocean clearance.
+ */
+function getIberianAtlanticFairway(isEcoWeatherMode) {
+  const P = SEA_CHOKEPOINTS;
+  return [
+    P.GULF_OF_CADIZ_OFFSHORE,
+    P.CABO_SAO_VICENTE_OFFSHORE,
+    P.PORTUGAL_SINES_OFFSHORE,
+    P.PORTUGAL_LISBON_OFFSHORE,
+    P.CABO_CARVOEIRO_OFFSHORE,
+    P.PORTUGAL_PORTO_OFFSHORE,
+    P.VIANA_DO_CASTELO_OFFSHORE,
+    P.VIGO_RIAS_BAIXAS_OFFSHORE,
+    P.CABO_FINISTERRE_OFFSHORE,
+    P.CABO_VILAN_OFFSHORE,
+    P.CORUNA_CABO_PRIOR,
+    P.CABO_ORTEGAL_NORTH,
+    isEcoWeatherMode ? P.BAY_OF_BISCAY_CALM_WEST : P.BAY_OF_BISCAY_WEST,
+    P.USHANT_BREST_TSS,
+    P.ENGLISH_CHANNEL_MID,
+    P.DOVER_STRAIT,
+    P.ROTTERDAM_APPROACH,
+  ];
+}
+
+/**
  * Builds Realistic Sea Corridors (with option for AI Weather Avoidance or Direct Baseline)
  */
 export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = true) {
@@ -183,6 +220,9 @@ export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = t
   const isStartAmericasWest = startLon < -100 && startLat > 0;
   const isDestAmericasWest = destLon < -100 && destLat > 0;
 
+  const isStartPortugal = startPort.countryCode === 'PT' || startPort.country === 'Portugal';
+  const isDestPortugal = destPort.countryCode === 'PT' || destPort.country === 'Portugal';
+
   // SCENARIO 1: East Asia <-> Europe via Suez / Malacca
   if ((isStartEastAsia && isDestEurope) || (isStartEurope && isDestEastAsia)) {
     const isReverse = isStartEurope;
@@ -210,13 +250,7 @@ export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = t
       P.MED_CENTRAL,
       P.MED_WEST,
       P.GIBRALTAR_STRAIT,
-      P.CABO_SAO_VICENTE,
-      P.PORTUGAL_SINES_OFFSHORE,
-      isEcoWeatherMode ? P.BAY_OF_BISCAY_CALM_WEST : P.BAY_OF_BISCAY,
-      P.USHANT_BREST,
-      P.ENGLISH_CHANNEL_MID,
-      P.DOVER_STRAIT,
-      P.ROTTERDAM_APPROACH,
+      ...getIberianAtlanticFairway(isEcoWeatherMode)
     ];
 
     if (isReverse) leg.reverse();
@@ -241,22 +275,8 @@ export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = t
       P.MED_CENTRAL,
       P.MED_WEST,
       P.GIBRALTAR_STRAIT,
+      ...getIberianAtlanticFairway(isEcoWeatherMode)
     ];
-
-    const isNorthernEurope = destLat > 42 || startLat > 42;
-    if (isNorthernEurope) {
-      leg.push(
-        P.CABO_SAO_VICENTE,
-        P.PORTUGAL_SINES_OFFSHORE,
-        isEcoWeatherMode ? P.BAY_OF_BISCAY_CALM_WEST : P.BAY_OF_BISCAY,
-        P.USHANT_BREST,
-        P.ENGLISH_CHANNEL_MID,
-        P.DOVER_STRAIT,
-        P.ROTTERDAM_APPROACH
-      );
-    } else {
-      leg.push(P.CABO_SAO_VICENTE, P.PORTUGAL_SINES_OFFSHORE);
-    }
 
     if (isReverse) leg.reverse();
     leg.forEach(add);
@@ -268,15 +288,19 @@ export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = t
     if (isStartIndiaOrArabian || isDestIndiaOrArabian || isStartEastAsia || isDestEastAsia) {
       leg.push(
         isEcoWeatherMode ? P.ARABIAN_SEA_CALM_SOUTH : P.ARABIAN_SEA_MID,
+        P.SOCOTRA_NORTH,
         P.BAB_EL_MANDEB,
+        P.RED_SEA_MID,
         P.SUEZ_NORTH,
-        P.GIBRALTAR_STRAIT
+        P.MED_EAST,
+        P.MED_WEST,
+        P.GIBRALTAR_STRAIT,
+        ...getIberianAtlanticFairway(isEcoWeatherMode)
       );
+    } else {
+      leg.push(...getIberianAtlanticFairway(isEcoWeatherMode));
     }
     leg.push(
-      P.CABO_SAO_VICENTE,
-      isEcoWeatherMode ? P.BAY_OF_BISCAY_CALM_WEST : P.BAY_OF_BISCAY,
-      P.ENGLISH_CHANNEL_WEST,
       P.NORTH_SEA_NORTH,
       P.NORWEGIAN_SEA_MID,
       P.LOFOTEN_OFFSHORE,
@@ -287,23 +311,40 @@ export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = t
     if (isReverse) leg.reverse();
     leg.forEach(add);
   }
-  // SCENARIO 4: Intra-European Coastal (Portugal, Spain, Netherlands, UK, Northern Sea)
-  else if (isStartEurope && isDestEurope) {
-    const isSouthToNorth = startLat < destLat;
+  // SCENARIO 4: Portugal <-> Northern Europe (Rotterdam, UK, Germany, Baltic)
+  else if ((isStartPortugal && isDestEurope && destLat > 42) || (isDestPortugal && isStartEurope && startLat > 42)) {
+    const isReverse = isDestPortugal;
     const leg = [
-      P.CABO_SAO_VICENTE,
       P.PORTUGAL_SINES_OFFSHORE,
-      P.CABO_FINISTERRE,
-      isEcoWeatherMode ? P.BAY_OF_BISCAY_CALM_WEST : P.BAY_OF_BISCAY,
-      P.USHANT_BREST,
+      P.PORTUGAL_LISBON_OFFSHORE,
+      P.CABO_CARVOEIRO_OFFSHORE,
+      P.PORTUGAL_PORTO_OFFSHORE,
+      P.VIANA_DO_CASTELO_OFFSHORE,
+      P.VIGO_RIAS_BAIXAS_OFFSHORE,
+      P.CABO_FINISTERRE_OFFSHORE,
+      P.CABO_VILAN_OFFSHORE,
+      P.CORUNA_CABO_PRIOR,
+      P.CABO_ORTEGAL_NORTH,
+      isEcoWeatherMode ? P.BAY_OF_BISCAY_CALM_WEST : P.BAY_OF_BISCAY_WEST,
+      P.USHANT_BREST_TSS,
       P.ENGLISH_CHANNEL_MID,
       P.DOVER_STRAIT,
       P.ROTTERDAM_APPROACH,
     ];
+    if (isReverse) leg.reverse();
+    leg.forEach(add);
+  }
+  // SCENARIO 5: Intra-European Coastal (Portugal, Spain, Netherlands, UK, Northern Sea)
+  else if (isStartEurope && isDestEurope) {
+    const isSouthToNorth = startLat < destLat;
+    const leg = [
+      P.GIBRALTAR_STRAIT,
+      ...getIberianAtlanticFairway(isEcoWeatherMode)
+    ];
     if (!isSouthToNorth) leg.reverse();
     leg.forEach(add);
   }
-  // SCENARIO 5: Transpacific (Asia <-> US West Coast)
+  // SCENARIO 6: Transpacific (Asia <-> US West Coast)
   else if ((isStartEastAsia && isDestAmericasWest) || (isStartAmericasWest && isDestEastAsia)) {
     add(P.EAST_CHINA_SEA);
     add(P.PACIFIC_NW);
@@ -333,7 +374,7 @@ export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = t
 /**
  * Main Oceanic Route Resolver with Weather Routing Alternatives
  */
-export async function getNavigableSeaRoute(startPort, destPort, apiKey) {
+export function getNavigableSeaRoute(startPort, destPort, apiKey) {
   // 1. Generate both routes: AI Eco-Weather Optimized & Baseline Direct Track
   const ecoCoords = buildRealisticSeaRoute(startPort, destPort, true);
   const directCoords = buildRealisticSeaRoute(startPort, destPort, false);
