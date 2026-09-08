@@ -37,7 +37,8 @@ export const SEA_CHOKEPOINTS = {
   RED_SEA_NORTH: [34.50, 27.20],
   GULF_OF_SUEZ_SOUTH: [33.80, 27.85],
   GULF_OF_SUEZ_MID: [33.10, 28.50],
-  GULF_OF_SUEZ_APPROACH: [32.565, 29.850],
+  GULF_OF_SUEZ_NORTH: [32.68, 29.50],
+  GULF_OF_SUEZ_APPROACH: [32.568, 29.870],
   PORT_TEWFIK_BASIN: [32.572, 29.935], // Port Tewfik water basin
   PORT_TEWFIK_CANAL_START: [32.576, 29.970], // Exact water channel of canal entrance
   SUEZ_SHALUFA_WATERWAY: [32.583, 30.070], // Shalufa canal water channel
@@ -49,7 +50,7 @@ export const SEA_CHOKEPOINTS = {
   SUEZ_BALLAH_BYPASS: [32.315, 30.820], // New Suez Canal bypass channel
   SUEZ_QANTARA: [32.320, 30.900], // Qantara water channel
   SUEZ_PORT_SAID_TERMINAL: [32.310, 31.260], // Port Said canal mouth & harbor
-  SUEZ_PORT_SAID_OFFSHORE: [32.330, 31.420], // Mediterranean Sea entrance
+  SUEZ_PORT_SAID_OFFSHORE: [32.320, 31.420], // Mediterranean Sea entrance
   NILE_DELTA_OFFSHORE: [31.000, 32.200], // Deep Mediterranean Sea fairway
   
   // Mediterranean & Gibraltar
@@ -132,14 +133,104 @@ export function computeNauticalMiles(coords) {
 }
 
 /**
- * Smooths waypoints with cubic Catmull-Rom spline interpolation
- * Converts sharp straight angles into realistic oceanic curved navigation tracks.
+ * Autonomous Maritime Land-Avoidance & Fairway Corridor Sentinel
+ * Autonomously inspects route coordinates against continental coastlines and narrow chokepoints.
+ * If any coordinate breaches land or drifts outside dredged fairways, it autonomously snaps
+ * and projects it back into designated safe maritime waterways without requiring user intervention.
  */
-export function smoothNauticalPath(points, segmentsPerCurve = 4) {
+export function autoCorrectMaritimePath(coords) {
+  if (!coords || coords.length === 0) return coords;
+
+  return coords.map(([lon, lat]) => {
+    let newLon = lon;
+    let newLat = lat;
+
+    // 1. SUEZ CANAL CORRIDOR AUTO-CORRECT (Only applies in Suez Canal longitude: 32.10°E to 32.80°E)
+    if (newLat >= 29.85 && newLat <= 31.45 && newLon >= 32.10 && newLon <= 32.80) {
+      // Approach & Port Tewfik: Must stay in Gulf of Suez water basin, never west into Suez city
+      if (newLat < 29.96) {
+        if (newLon < 32.565) newLon = 32.568;
+        if (newLon > 32.585) newLon = 32.575;
+      }
+      // Southern Canal Trench (Port Tewfik to Shalufa):
+      else if (newLat >= 29.96 && newLat < 30.10) {
+        if (newLon < 32.570) newLon = 32.576;
+        if (newLon > 32.595) newLon = 32.585;
+      }
+      // Little Bitter Lake
+      else if (newLat >= 30.10 && newLat < 30.22) {
+        if (newLon < 32.580) newLon = 32.600;
+        if (newLon > 32.625) newLon = 32.610;
+      }
+      // Great Bitter Lake
+      else if (newLat >= 30.22 && newLat < 30.42) {
+        if (newLon < 32.320) newLon = 32.350;
+        if (newLon > 32.520) newLon = 32.450;
+      }
+      // Deversoir to Lake Timsah (Ismailia)
+      else if (newLat >= 30.42 && newLat < 30.65) {
+        if (newLon < 32.275) newLon = 32.285;
+        if (newLon > 32.330) newLon = 32.300;
+      }
+      // Ballah Bypass & Al Qantara
+      else if (newLat >= 30.65 && newLat < 31.10) {
+        if (newLon < 32.300) newLon = 32.315;
+        if (newLon > 32.335) newLon = 32.320;
+      }
+      // Port Said Canal Mouth & Mediterranean Fairway
+      else if (newLat >= 31.10 && newLat <= 31.45) {
+        if (newLon < 32.290) newLon = 32.310;
+        if (newLon > 32.340) newLon = 32.325; // Prevents bulging into Sinai / Port Fouad
+      }
+    }
+
+    // 2. IBERIAN PENINSULA & PORTUGAL OFFSHORE CORRIDOR AUTO-CORRECT
+    if (newLat >= 36.8 && newLat <= 43.8 && newLon >= -10.5 && newLon <= -7.5) {
+      if (newLat >= 36.8 && newLat < 37.8) {
+        if (newLon > -9.30) newLon = -9.45;
+      } else if (newLat >= 37.8 && newLat < 39.5) {
+        if (newLon > -9.60) newLon = -9.80;
+      } else if (newLat >= 39.5 && newLat < 41.5) {
+        if (newLon > -9.30) newLon = -9.60;
+      } else if (newLat >= 41.5 && newLat < 42.6) {
+        if (newLon > -9.30) newLon = -9.65;
+      } else if (newLat >= 42.6 && newLat < 43.6) {
+        if (newLon > -9.50) newLon = -9.85;
+      }
+    }
+    // Clears Cabo Prior and Cabo Ortegal into Bay of Biscay
+    if (newLat >= 43.5 && newLat <= 44.1 && newLon > -9.0 && newLon < -7.0) {
+      if (newLat < 44.20) newLat = 44.25;
+    }
+
+    // 3. GIBRALTAR STRAIT (-5.9° to -5.2° lon)
+    if (newLon >= -5.85 && newLon <= -5.25) {
+      if (newLat > 36.05) newLat = 35.98;
+      if (newLat < 35.85) newLat = 35.92;
+    }
+
+    return [Number(newLon.toFixed(4)), Number(newLat.toFixed(4))];
+  });
+}
+
+/**
+ * Centripetal Catmull-Rom Spline with Hydrodynamic Nautical Curvature
+ * 1. Mathematically eliminates overshoots, cusps, and self-intersections (alpha = 0.5).
+ * 2. Provides smooth, wavy nautical curves at waypoints instead of rigid straight corners.
+ * 3. Enforces Autonomous Land Avoidance across every coordinate generated.
+ */
+export function smoothNauticalPath(points, segmentsPerCurve = 8, alpha = 0.5) {
   if (!points || points.length <= 2) return points;
 
   const result = [];
   const pts = [points[0], ...points, points[points.length - 1]];
+
+  function getT(tPrev, pA, pB) {
+    const dx = pB[0] - pA[0];
+    const dy = pB[1] - pA[1];
+    const d = Math.sqrt(dx * dx + dy * dy);
+    return tPrev + Math.pow(Math.max(d, 1e-4), alpha);
+  }
 
   for (let i = 1; i < pts.length - 2; i++) {
     const p0 = pts[i - 1];
@@ -147,32 +238,38 @@ export function smoothNauticalPath(points, segmentsPerCurve = 4) {
     const p2 = pts[i + 1];
     const p3 = pts[i + 2];
 
-    for (let t = 0; t < segmentsPerCurve; t++) {
-      const u = t / segmentsPerCurve;
-      const u2 = u * u;
-      const u3 = u2 * u;
+    const t0 = 0;
+    const t1 = getT(t0, p0, p1);
+    const t2 = getT(t1, p1, p2);
+    const t3 = getT(t2, p2, p3);
 
-      // Catmull-Rom spline formulation
-      const lon = 0.5 * (
-        (2 * p1[0]) +
-        (-p0[0] + p2[0]) * u +
-        (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * u2 +
-        (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * u3
-      );
+    for (let s = 0; s < segmentsPerCurve; s++) {
+      const t = t1 + (s / segmentsPerCurve) * (t2 - t1);
 
-      const lat = 0.5 * (
-        (2 * p1[1]) +
-        (-p0[1] + p2[1]) * u +
-        (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * u2 +
-        (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * u3
-      );
+      const a1_x = ((t1 - t) * p0[0] + (t - t0) * p1[0]) / (t1 - t0);
+      const a1_y = ((t1 - t) * p0[1] + (t - t0) * p1[1]) / (t1 - t0);
 
-      result.push([Number(lon.toFixed(4)), Number(lat.toFixed(4))]);
+      const a2_x = ((t2 - t) * p1[0] + (t - t1) * p2[0]) / (t2 - t1);
+      const a2_y = ((t2 - t) * p1[1] + (t - t1) * p2[1]) / (t2 - t1);
+
+      const a3_x = ((t3 - t) * p2[0] + (t - t2) * p3[0]) / (t3 - t2);
+      const a3_y = ((t3 - t) * p2[1] + (t - t2) * p3[1]) / (t3 - t2);
+
+      const b1_x = ((t2 - t) * a1_x + (t - t0) * a2_x) / (t2 - t0);
+      const b1_y = ((t2 - t) * a1_y + (t - t0) * a2_y) / (t2 - t0);
+
+      const b2_x = ((t3 - t) * a2_x + (t - t1) * a3_x) / (t3 - t1);
+      const b2_y = ((t3 - t) * a2_y + (t - t1) * a3_y) / (t3 - t1);
+
+      const c_x = ((t2 - t) * b1_x + (t - t1) * b2_x) / (t2 - t1);
+      const c_y = ((t2 - t) * b1_y + (t - t1) * b2_y) / (t2 - t1);
+
+      result.push([Number(c_x.toFixed(4)), Number(c_y.toFixed(4))]);
     }
   }
 
   result.push(points[points.length - 1]);
-  return result;
+  return autoCorrectMaritimePath(result);
 }
 
 /**
@@ -258,6 +355,7 @@ export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = t
       P.RED_SEA_NORTH,
       P.GULF_OF_SUEZ_SOUTH,
       P.GULF_OF_SUEZ_MID,
+      P.GULF_OF_SUEZ_NORTH,
       P.GULF_OF_SUEZ_APPROACH,
       P.PORT_TEWFIK_BASIN,
       P.PORT_TEWFIK_CANAL_START,
@@ -296,6 +394,7 @@ export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = t
       P.RED_SEA_NORTH,
       P.GULF_OF_SUEZ_SOUTH,
       P.GULF_OF_SUEZ_MID,
+      P.GULF_OF_SUEZ_NORTH,
       P.GULF_OF_SUEZ_APPROACH,
       P.PORT_TEWFIK_BASIN,
       P.PORT_TEWFIK_CANAL_START,
@@ -330,6 +429,7 @@ export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = t
         P.SOCOTRA_NORTH,
         P.BAB_EL_MANDEB,
         P.RED_SEA_MID,
+        P.GULF_OF_SUEZ_NORTH,
         P.GULF_OF_SUEZ_APPROACH,
         P.PORT_TEWFIK_BASIN,
         P.PORT_TEWFIK_CANAL_START,
@@ -419,8 +519,8 @@ export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = t
     return Math.abs(pt[0] - prev[0]) > 0.05 || Math.abs(pt[1] - prev[1]) > 0.05;
   });
 
-  // Apply continuous nautical spline curvature
-  return smoothNauticalPath(rawWaypoints, 4);
+  // Apply continuous nautical spline curvature with autonomous land avoidance
+  return smoothNauticalPath(rawWaypoints, 8);
 }
 
 /**

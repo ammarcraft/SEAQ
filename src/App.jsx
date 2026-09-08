@@ -405,6 +405,13 @@ function calculateBearing(startLat, startLng, destLat, destLng) {
   return (brng + 360) % 360;
 }
 
+function getCardinalDirection(angle) {
+  if (angle === undefined || angle === null || isNaN(angle)) return 'N';
+  const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  const index = Math.round((((angle % 360) + 360) % 360) / 22.5) % 16;
+  return directions[index];
+}
+
 const getDefaultDeadline = () => {
   const d = new Date();
   d.setDate(d.getDate() + 18);
@@ -906,20 +913,71 @@ export default function App() {
             </Marker>
           )}
 
-          {/* START POINT: HIGH-TECH DEPARTURE ARROW */}
+          {/* START POINT: HIGH-TECH ECDIS MARITIME DEPARTURE BEACON */}
           <Marker longitude={startPort.coords[0]} latitude={startPort.coords[1]} anchor="center">
-            <div className="flex flex-col items-center cursor-pointer">
-              <div className="px-2.5 py-1 rounded-md bg-white text-[11px] font-medium text-slate-800 shadow-lg border border-purple-200 mb-1.5 whitespace-nowrap">
-                Start: {startPort.name}
-              </div>
-              <div className="relative flex items-center justify-center">
-                <div className="absolute w-10 h-10 rounded-full bg-purple-500/25 animate-ping" />
-                <div
-                  className="transition-transform duration-500 drop-shadow-[0_0_14px_rgba(168,85,247,0.95)] filter"
-                  style={{ transform: `rotate(${departureAngle - 45}deg)` }}
-                >
-                  <Navigation className="w-7 h-7 text-white fill-purple-600 stroke-purple-200 stroke-[1.5]" />
+            <div className="flex flex-col items-center cursor-pointer group select-none">
+              {/* Floating Nautical Departure Card */}
+              <div className="px-3 py-1.5 rounded-lg bg-slate-900/95 backdrop-blur-md text-white shadow-2xl border border-cyan-500/50 mb-2 whitespace-nowrap flex flex-col items-center gap-0.5 transform transition-transform group-hover:scale-105">
+                <div className="flex items-center gap-1.5 text-[10px] text-cyan-400 font-bold uppercase tracking-wider">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+                  <span>Departure Port</span>
+                  <span className="text-slate-500">•</span>
+                  <span className="text-cyan-300 font-mono">HDG {Math.round(departureAngle)}° {getCardinalDirection(departureAngle)}</span>
                 </div>
+                <div className="text-[12px] font-semibold text-slate-100 flex items-center gap-1.5">
+                  <span>⚓</span>
+                  <span>{startPort.name}</span>
+                  {startPort.countryCode && (
+                    <span className="px-1 py-0.2 rounded bg-cyan-950/80 border border-cyan-500/40 text-[9px] text-cyan-300 font-mono">
+                      {startPort.countryCode}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* High-Tech Nautical Compass Dial with Directional Needle */}
+              <div className="relative flex items-center justify-center">
+                {/* Sonar Radar Ping Waves */}
+                <div className="absolute w-16 h-16 rounded-full bg-cyan-500/20 border border-cyan-400/40 animate-ping pointer-events-none" />
+                <div className="absolute w-12 h-12 rounded-full bg-purple-500/15 pointer-events-none" />
+
+                {/* Compass Rose SVG Dial */}
+                <svg
+                  viewBox="0 0 52 52"
+                  className="w-12 h-12 drop-shadow-[0_0_14px_rgba(6,182,212,0.85)] filter transition-all duration-300 group-hover:scale-110"
+                >
+                  {/* Outer Bezel */}
+                  <circle cx="26" cy="26" r="24" fill="#090d16" stroke="#06b6d4" strokeWidth="1.8" />
+                  <circle cx="26" cy="26" r="20" fill="none" stroke="#1e293b" strokeWidth="1" strokeDasharray="2,2" />
+
+                  {/* Cardinal Compass Ticks */}
+                  <line x1="26" y1="4" x2="26" y2="8" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" />
+                  <line x1="26" y1="44" x2="26" y2="48" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" />
+                  <line x1="4" y1="26" x2="8" y2="26" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" />
+                  <line x1="44" y1="26" x2="48" y2="26" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" />
+                  <text x="26" y="13" textAnchor="middle" fontSize="6.5" fontWeight="bold" fill="#38bdf8" fontFamily="monospace">N</text>
+
+                  {/* Rotating Vessel Departure Needle */}
+                  <g
+                    style={{
+                      transform: `rotate(${departureAngle}deg)`,
+                      transformOrigin: '26px 26px',
+                      transition: 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                    }}
+                  >
+                    {/* Directional Arrow (Facing North 0° at y=7) */}
+                    {/* Left cyan arrowhead */}
+                    <polygon points="26,7 21,26 26,22" fill="#06b6d4" />
+                    {/* Right sky-blue arrowhead */}
+                    <polygon points="26,7 31,26 26,22" fill="#38bdf8" />
+                    {/* Tail fins */}
+                    <polygon points="26,22 22,38 26,34" fill="#8b5cf6" opacity="0.95" />
+                    <polygon points="26,22 30,38 26,34" fill="#a855f7" opacity="0.95" />
+                    {/* Center illuminated pivot */}
+                    <circle cx="26" cy="26" r="3.5" fill="#ffffff" stroke="#0284c7" strokeWidth="1.5" />
+                    <circle cx="26" cy="26" r="1.5" fill="#0369a1" />
+                  </g>
+                </svg>
               </div>
             </div>
           </Marker>
