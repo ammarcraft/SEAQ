@@ -756,9 +756,12 @@ export default function App() {
       }
     } catch (err) {
       console.warn('[Route Calculation] Fallback exception:', err);
+    } finally {
+      setIsOptimizing(false);
     }
 
-    // Climatiq
+    // Secondary Telemetry (Non-blocking background sync)
+    // Climatiq CO2
     try {
       const distKm = Math.round(computedNM * 1.852);
       const res = await fetch('/api/climatiq/data/v1/estimate', {
@@ -789,7 +792,7 @@ export default function App() {
       setBaseCo2eTonnes(estTonnes || 16400);
     }
 
-    // EIA
+    // EIA Fuel
     try {
       const res = await fetch(
         `/api/eia/v2/petroleum/pri/spt/data/?api_key=${API_KEYS.EIA}&frequency=weekly&data[0]=value&sort[0][column]=period&sort[0][direction]=desc&length=1`
@@ -804,14 +807,12 @@ export default function App() {
       // ignore
     }
 
-    // Trigger Stormglass Ocean Telemetry fetch with failover for this route's exact swell coordinates
+    // Trigger Ocean Telemetry for this route's exact swell coordinates
     if (currentStormZone && currentStormZone.center) {
       refreshOceanData(currentStormZone.center[1], currentStormZone.center[0]);
     } else {
       refreshOceanData();
     }
-
-    setIsOptimizing(false);
   }, [startPort, destPort, selectedShip, cargoWeight, refreshOceanData, fitRouteBounds]);
 
   useEffect(() => {

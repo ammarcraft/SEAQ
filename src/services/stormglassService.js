@@ -23,6 +23,7 @@ const CACHE_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes TTL for marine hydrodynami
 
 // In-Memory Fallback Cache & Real-Time Telemetry Counters
 const memoryDbCache = new Map();
+const exhaustedKeys = new Set();
 
 // API Request Tracking Statistics
 let requestStats = {
@@ -112,7 +113,7 @@ export async function fetchStormglassDataWithFailover(lat, lon) {
 
   while (attempts < poolLen) {
     const key = INITIAL_STORMGLASS_KEYS[requestStats.activeKeyIndex];
-    if (!key || key.trim().length === 0) {
+    if (!key || key.trim().length === 0 || exhaustedKeys.has(key)) {
       requestStats.activeKeyIndex = (requestStats.activeKeyIndex + 1) % poolLen;
       attempts++;
       continue;
@@ -126,10 +127,11 @@ export async function fetchStormglassDataWithFailover(lat, lon) {
         headers: {
           Authorization: key.trim(),
         },
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(1500),
       });
 
       if (response.status === 402 || response.status === 429) {
+        exhaustedKeys.add(key);
         console.warn(`[Stormglass Keypool] Key #${requestStats.activeKeyIndex + 1} quota reached (HTTP ${response.status}). Auto-rolling to key #${((requestStats.activeKeyIndex + 1) % poolLen) + 1}...`);
         requestStats.activeKeyIndex = (requestStats.activeKeyIndex + 1) % poolLen;
         attempts++;

@@ -718,19 +718,136 @@ function removeBacktracking(points) {
   return cleaned;
 }
 
+export const SEAROUTES_DEFAULT_KEY = 'H8OkShCblA3eBl4QsKao22882uL168gG1L2s3xNa';
+
+/**
+ * Official SeaRoutes API Client (searoutes.com v2)
+ * Connects directly to commercial maritime network with user's authorized API key.
+ * Implements client-side persistent caching to preserve API quota.
+ */
+export async function fetchOfficialSeaRoutes(startCoords, destCoords, viaCoord = null, userApiKey = null) {
+  const apiKey = userApiKey || SEAROUTES_DEFAULT_KEY;
+  const startStr = `${startCoords[0]},${startCoords[1]}`;
+  const destStr = `${destCoords[0]},${destCoords[1]}`;
+  const pathStr = viaCoord
+    ? `${startStr};${viaCoord[0]},${viaCoord[1]};${destStr}`
+    : `${startStr};${destStr}`;
+
+  const cacheKey = `searoutes_v2_${pathStr}`;
+
+  // 1. Check local persistent cache to prevent consuming limited API quota
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const cached = window.localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.coordinates && parsed.coordinates.length > 5) {
+          console.log('[SeaRoutes Official API] Loaded from cache (0 quota):', pathStr);
+          return parsed;
+        }
+      }
+    }
+  } catch (e) {
+    // Ignore storage errors
+  }
+
+  // 2. Query endpoints: Proxy first (Vite/Vercel), then direct public endpoint (with CORS)
+  const endpoints = [
+    `/api/searoutes/route/v2/sea/${pathStr}`,
+    `https://api.searoutes.com/route/v2/sea/${pathStr}`,
+  ];
+
+  let rawData = null;
+  for (const ep of endpoints) {
+    try {
+      const res = await fetch(ep, {
+        method: 'GET',
+        headers: {
+          'x-api-key': apiKey,
+          'accept': 'application/json',
+        },
+      });
+
+      if (res.status === 200) {
+        rawData = await res.json();
+        break;
+      } else {
+        console.warn(`[SeaRoutes API] Endpoint ${ep} returned HTTP ${res.status}`);
+      }
+    } catch (netErr) {
+      console.warn(`[SeaRoutes API] Network probe to ${ep} notice:`, netErr.message);
+    }
+  }
+
+  if (!rawData || !rawData.features || rawData.features.length === 0) {
+    return null;
+  }
+
+  // Combine feature coordinates and properties
+  let mergedCoords = [];
+  let totalMeters = 0;
+  let areas = [];
+
+  for (const f of rawData.features) {
+    if (f.geometry && Array.isArray(f.geometry.coordinates)) {
+      if (mergedCoords.length > 0) {
+        mergedCoords.push(...f.geometry.coordinates.slice(1));
+      } else {
+        mergedCoords.push(...f.geometry.coordinates);
+      }
+    }
+    if (f.properties) {
+      totalMeters += f.properties.distance || 0;
+      if (f.properties.areas?.features) {
+        areas.push(...f.properties.areas.features);
+      }
+    }
+  }
+
+  const result = {
+    coordinates: mergedCoords,
+    distanceMeters: totalMeters,
+    distanceNM: Math.round(totalMeters * 0.000539957),
+    areas,
+    source: 'Official SeaRoutes API (searoutes.com)',
+  };
+
+  // Cache for future instant loads
+  try {
+    if (typeof window !== 'undefined' && window.localStorage && result.coordinates.length > 5) {
+      window.localStorage.setItem(cacheKey, JSON.stringify(result));
+    }
+  } catch {
+    // ignore
+  }
+
+  return result;
+}
+
 /**
  * Builds the complete waypoints manifest for all real navigation nodes
  * Exactly ONE designated marine acoustic sanctuary along the entire route.
  */
-function generateWaypointsManifest(coords, startPort, destPort, passages) {
-  const total = coords.length;
+function generateWaypointsManifest(coords, startPort, destPort, passages, areas = []) {
+  // If dense coordinates (> 40 points), sample down to ~24 representative waypoints to keep UI responsive
+  let manifestCoords = coords;
+  if (coords.length > 40) {
+    const step = Math.ceil(coords.length / 24);
+    manifestCoords = [coords[0]];
+    for (let i = step; i < coords.length - 1; i += step) {
+      manifestCoords.push(coords[i]);
+    }
+    manifestCoords.push(coords[coords.length - 1]);
+  }
+
+  const total = manifestCoords.length;
   let accDistance = 0;
   // Place exactly ONE acoustic/noise sanctuary at ~40% of the voyage
   const sanctuaryIndex = Math.max(1, Math.min(total - 2, Math.floor(total * 0.4)));
 
-  return coords.map((pt, i) => {
+  return manifestCoords.map((pt, i) => {
     if (i > 0) {
-      const prev = coords[i - 1];
+      const prev = manifestCoords[i - 1];
       accDistance += calculateDistanceKm(prev[1], prev[0], pt[1], pt[0]) * 0.539957;
     }
 
@@ -751,72 +868,99 @@ function generateWaypointsManifest(coords, startPort, destPort, passages) {
 }
 
 /**
- * Builds realistic sea route using Eurostat 2025 global maritime network (searoute-ts)
+ * Builds realistic sea route using Official SeaRoutes API (with Eurostat 2025 offline fallback)
  * Guarantees 100% unbroken, continuous sea water traversal with zero backtracking spurs.
  */
-export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = true, viaCoord = null) {
+export async function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = true, viaCoord = null, apiKey = null) {
   const startCoords = startPort.coords;
   const destCoords = destPort.coords;
 
   let rawRoute = null;
+  let areasFromAPI = [];
+  let officialNM = 0;
 
-  if (viaCoord) {
-    try {
-      rawRoute = seaRouteMulti([startCoords, viaCoord, destCoords], {
-        appendOriginDestination: true,
-        returnPassages: true,
-      });
-    } catch (e) {
-      console.warn('[searoute-ts] Multi waypoint route error:', e);
-      rawRoute = null;
+  // 1. Live Official SeaRoutes API with provided user API key
+  try {
+    const officialRes = await fetchOfficialSeaRoutes(startCoords, destCoords, viaCoord, apiKey);
+    if (officialRes && officialRes.coordinates && officialRes.coordinates.length > 5) {
+      rawRoute = {
+        geometry: { coordinates: officialRes.coordinates },
+        properties: { passages: [], length: officialRes.distanceMeters, areas: officialRes.areas },
+        isOfficialAPI: true,
+      };
+      areasFromAPI = officialRes.areas || [];
+      officialNM = officialRes.distanceNM;
+      console.log('[SeaRoutes API] Successfully loaded official route with', officialRes.coordinates.length, 'coordinates');
     }
+  } catch (errApi) {
+    console.warn('[SeaRoutes API] Notice:', errApi.message);
   }
 
+  // 2. High-Accuracy Offline Fallback (searoute-ts)
   if (!rawRoute) {
-    try {
-      rawRoute = seaRoute(startCoords, destCoords, {
-        appendOriginDestination: true,
-        returnPassages: true,
-      });
-    } catch (e) {
-      console.warn('[searoute-ts] Direct graph path error, using fallback:', e);
-      rawRoute = {
-        geometry: { coordinates: [startCoords, destCoords] },
-        properties: { passages: [], length: 0 },
-      };
+    if (viaCoord) {
+      try {
+        rawRoute = seaRouteMulti([startCoords, viaCoord, destCoords], {
+          appendOriginDestination: true,
+          returnPassages: true,
+        });
+      } catch (e) {
+        rawRoute = null;
+      }
+    }
+    if (!rawRoute) {
+      try {
+        rawRoute = seaRoute(startCoords, destCoords, {
+          appendOriginDestination: true,
+          returnPassages: true,
+        });
+      } catch (e) {
+        rawRoute = {
+          geometry: { coordinates: [startCoords, destCoords] },
+          properties: { passages: [], length: 0 },
+        };
+      }
     }
   }
 
   let coords = rawRoute.geometry.coordinates || [startCoords, destCoords];
   const passages = rawRoute.properties?.passages || [];
 
-  // 1. Repair any wide graph gaps that cut across land (e.g. Bay of Bengal -> Sri Lanka, Kanyakumari, Malacca)
-  coords = repairLandCrossingSegments(coords);
-
-  // 2. Precision Suez Dredged Fairway Splice:
-  const isTransitSuez = passages.includes('suez') || coords.some(c => c[0] >= 32.1 && c[0] <= 32.8 && c[1] >= 29.8 && c[1] <= 31.4);
+  // Precision Suez Dredged Fairway Splice:
+  const isTransitSuez = passages.includes('suez') ||
+    areasFromAPI.some(a => (a.properties?.name || '').toLowerCase().includes('suez')) ||
+    coords.some(c => c[0] >= 32.1 && c[0] <= 32.8 && c[1] >= 29.8 && c[1] <= 31.4);
   if (isTransitSuez) {
     const isSouthToNorth = startCoords[1] < destCoords[1];
     coords = spliceSuezFairway(coords, isSouthToNorth);
   }
 
-  // 3. Remove any backtracking hooks / duplicate spurs
+  // Remove backtracking spurs
   coords = removeBacktracking(coords);
+
+  // If using offline fallback, repair wide gaps
+  if (!rawRoute.isOfficialAPI) {
+    coords = repairLandCrossingSegments(coords);
+  }
 
   // Deduplicate consecutive identical points
   const rawWaypoints = coords.filter((pt, i) => {
     if (i === 0) return true;
     const prev = coords[i - 1];
-    return Math.abs(pt[0] - prev[0]) > 0.001 || Math.abs(pt[1] - prev[1]) > 0.001;
+    return Math.abs(pt[0] - prev[0]) > 0.0005 || Math.abs(pt[1] - prev[1]) > 0.0005;
   });
 
-  // Generate rich Waypoints Manifest for ALL real waypoints
-  const waypointsManifest = generateWaypointsManifest(rawWaypoints, startPort, destPort, passages);
+  // Generate rich Waypoints Manifest
+  const waypointsManifest = generateWaypointsManifest(rawWaypoints, startPort, destPort, passages, areasFromAPI);
 
-  // Adaptive Nautical Smoother: Graceful, hydrodynamic curves at waypoint turns (100% water guaranteed, zero land cuts)
-  const smoothed = smoothNauticalPath(rawWaypoints, isEcoWeatherMode);
+  // Smoothing: For official API coordinates, they are already ultra-dense (900+ points) and 100% water.
+  // For offline fallback, run smoothNauticalPath with land-collision protection.
+  const smoothed = rawRoute.isOfficialAPI
+    ? rawWaypoints
+    : smoothNauticalPath(rawWaypoints, isEcoWeatherMode);
 
   const corrected = autoCorrectMaritimePath(smoothed);
+  const computedNM = officialNM || computeNauticalMiles(corrected);
 
   return {
     coordinates: corrected,
@@ -824,6 +968,8 @@ export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = t
     waypointsManifest,
     passages,
     isAvoidWeather: isEcoWeatherMode,
+    isOfficialAPI: !!rawRoute.isOfficialAPI,
+    distanceNM: computedNM,
   };
 }
 
@@ -835,8 +981,8 @@ export async function getNavigableSeaRoute(startPort, destPort, apiKey) {
   const startCoords = startPort.coords;
   const destCoords = destPort.coords;
 
-  // 1. Calculate the foundational realistic sea route
-  const baseRoute = buildRealisticSeaRoute(startPort, destPort, true);
+  // 1. Calculate the foundational realistic sea route using official SeaRoutes API (with offline fallback)
+  const baseRoute = await buildRealisticSeaRoute(startPort, destPort, true, null, apiKey);
   const rawCoords = baseRoute.rawWaypoints || [];
 
   // 2. Identify the dynamic Oceanic Swell Zone specifically for THIS active voyage:
@@ -860,9 +1006,9 @@ export async function getNavigableSeaRoute(startPort, destPort, apiKey) {
     // Arabian Sea Swell Vortex [62.605, 16.55]
     stormPoint = [62.605, 16.55];
     stormName = 'Arabian Sea Monsoonal High Swell Center';
-    directRoute = buildRealisticSeaRoute(startPort, destPort, false, stormPoint);
+    directRoute = await buildRealisticSeaRoute(startPort, destPort, false, stormPoint, apiKey);
     if (startCoords[0] >= 68 && startCoords[0] <= 78 && destCoords[0] < 55) {
-      ecoRoute = buildRealisticSeaRoute(startPort, destPort, true, [65.036875, 10.010938]);
+      ecoRoute = await buildRealisticSeaRoute(startPort, destPort, true, [65.036875, 10.010938], apiKey);
     } else {
       ecoRoute = baseRoute;
     }
@@ -871,8 +1017,7 @@ export async function getNavigableSeaRoute(startPort, destPort, apiKey) {
     const slPt = rawCoords.find(c => c[0] >= 79.5 && c[0] <= 81.5 && c[1] >= 5.0 && c[1] <= 6.5) || [80.1, 5.8];
     stormPoint = [Number(slPt[0].toFixed(3)), Number(slPt[1].toFixed(3))];
     stormName = 'Sri Lanka Dondra Head Oceanic Swell';
-    // Direct track cuts straight across deep open swell
-    directRoute = buildRealisticSeaRoute(startPort, destPort, false, stormPoint);
+    directRoute = await buildRealisticSeaRoute(startPort, destPort, false, stormPoint, apiKey);
     ecoRoute = baseRoute;
   } else {
     // For ANY other route on Earth: pick the primary open-ocean passage waypoint along the route
@@ -880,7 +1025,7 @@ export async function getNavigableSeaRoute(startPort, destPort, apiKey) {
     const midPt = rawCoords[midIdx] || startCoords;
     stormPoint = [Number(midPt[0].toFixed(3)), Number(midPt[1].toFixed(3))];
     stormName = `${startPort.country || 'Oceanic'} Transit Swell Corridor`;
-    directRoute = buildRealisticSeaRoute(startPort, destPort, false, stormPoint);
+    directRoute = await buildRealisticSeaRoute(startPort, destPort, false, stormPoint, apiKey);
     ecoRoute = baseRoute;
   }
 
@@ -961,7 +1106,10 @@ export async function getNavigableSeaRoute(startPort, destPort, apiKey) {
     waypoints: ecoRoute.waypointsManifest,
     rawWaypoints: ecoRoute.rawWaypoints,
     passages: ecoRoute.passages,
-    source: 'Eurostat 2025 Maritime Network (100% Waterway Guarantee)',
+    source: baseRoute.isOfficialAPI
+      ? 'SeaRoutes Official Maritime API (api.searoutes.com)'
+      : 'Eurostat 2025 Maritime Network (100% Waterway Guarantee)',
+    isOfficialAPI: !!baseRoute.isOfficialAPI,
     weatherSavings,
     stormZone,
   };
