@@ -505,6 +505,8 @@ export default function App() {
   // Map inspection & toggles
   const [showWaypoints, setShowWaypoints] = useState(true);
   const [selectedWaypoint, setSelectedWaypoint] = useState(null);
+  const [allWaypoints, setAllWaypoints] = useState([]);
+  const [isWaypointsDrawerOpen, setIsWaypointsDrawerOpen] = useState(false);
   const [showAcoustics, setShowAcoustics] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
 
@@ -647,6 +649,9 @@ export default function App() {
 
   // Route Waypoints
   const routeWaypoints = useMemo(() => {
+    if (allWaypoints && allWaypoints.length > 0) {
+      return allWaypoints;
+    }
     if (!routeGeoJson?.geometry?.coordinates || routeGeoJson.geometry.coordinates.length === 0) {
       return [
         { id: 'WP-1', name: `Pilot: ${startPort.name}`, coords: startPort.coords, speedLimit: `${selectedShip.speedKts} kts`, status: 'Departure', isNoiseZone: false },
@@ -665,7 +670,7 @@ export default function App() {
       { id: 'WP-4', name: 'Continental Shelf Transition', coords: coords[Math.floor(count * 0.75)], speedLimit: `${selectedShip.speedKts} kts`, status: 'Open Sea', isNoiseZone: false },
       { id: 'WP-5', name: `Port Gateway: ${destPort.name}`, coords: coords[count - 1], speedLimit: '10.0 kts', status: 'Arrival', isNoiseZone: false },
     ];
-  }, [routeGeoJson, startPort, destPort, selectedShip]);
+  }, [allWaypoints, routeGeoJson, startPort, destPort, selectedShip]);
 
   const noiseZoneCoords = useMemo(() => {
     const wp3 = routeWaypoints.find(w => w.isNoiseZone) || routeWaypoints[1];
@@ -682,6 +687,18 @@ export default function App() {
     });
   }, [noiseZoneCoords]);
 
+  const handleSelectWaypoint = useCallback((wp) => {
+    setSelectedWaypoint(wp);
+    if (!isRightOpen) setIsRightOpen(true);
+    setViewState(prev => ({
+      ...prev,
+      longitude: wp.coords[0],
+      latitude: wp.coords[1],
+      zoom: Math.max(prev.zoom, 6.5),
+      transitionDuration: 800,
+    }));
+  }, [isRightOpen]);
+
   // Route calculation with Autonomous Maritime Sea-Lane Guarantee
   const calculateRoute = useCallback(async (customStart, customDest) => {
     setIsOptimizing(true);
@@ -696,6 +713,7 @@ export default function App() {
         setDirectRouteGeoJson(result.directGeoJson);
         computedNM = result.distanceNM;
         setDistanceNM(computedNM);
+        if (result.waypoints) setAllWaypoints(result.waypoints);
         if (result.weatherSavings) setWeatherSavings(result.weatherSavings);
         if (result.stormZone) setStormZone(result.stormZone);
 
@@ -963,16 +981,13 @@ export default function App() {
             </div>
           </Marker>
 
-          {/* WAYPOINTS ON MAP */}
-          {showWaypoints && routeWaypoints.map((wp) => (
+          {/* ALL MARITIME WAYPOINTS ON MAP */}
+          {showWaypoints && routeWaypoints.slice(1, -1).map((wp) => (
             <Marker key={wp.id} longitude={wp.coords[0]} latitude={wp.coords[1]} anchor="center">
               <div
-                onClick={() => {
-                  setSelectedWaypoint(wp);
-                  if (!isRightOpen) setIsRightOpen(true);
-                }}
-                className={`group relative flex flex-col items-center cursor-pointer transition-transform hover:scale-110 ${
-                  wp.isNoiseZone ? 'z-30' : 'z-20'
+                onClick={() => handleSelectWaypoint(wp)}
+                className={`group relative flex flex-col items-center cursor-pointer transition-transform hover:scale-125 ${
+                  wp.isNoiseZone ? 'z-30' : wp.isChokepoint ? 'z-25' : 'z-20'
                 }`}
               >
                 {wp.isNoiseZone ? (
@@ -982,17 +997,24 @@ export default function App() {
                       Speed Reduction Zone: 12.0 kts Max
                     </div>
                     <div className="relative flex items-center justify-center">
-                      <div className="absolute w-14 h-14 rounded-full bg-amber-500/25 animate-ping" />
-                      <div className="w-7 h-7 rounded-full bg-amber-500 border-2 border-white shadow-xl flex items-center justify-center text-white text-[10px] font-bold">
+                      <div className="absolute w-12 h-12 rounded-full bg-amber-500/25 animate-ping" />
+                      <div className="w-6 h-6 rounded-full bg-amber-500 border-2 border-white shadow-xl flex items-center justify-center text-white text-[10px] font-bold">
                         12
                       </div>
                     </div>
                   </div>
+                ) : wp.isChokepoint ? (
+                  <div className="flex flex-col items-center">
+                    <div className="w-3.5 h-3.5 rounded-sm bg-purple-600 border-2 border-white shadow-md rotate-45 flex items-center justify-center" />
+                    <span className="opacity-0 group-hover:opacity-100 transition-opacity absolute -bottom-5 px-2 py-0.5 rounded bg-slate-900 text-white text-[9px] font-medium whitespace-nowrap pointer-events-none z-40 shadow-md">
+                      {wp.id}: {wp.name}
+                    </span>
+                  </div>
                 ) : (
                   <div className="flex flex-col items-center">
-                    <div className="w-3 h-3 rounded-full bg-white border-2 border-purple-600 shadow-sm" />
-                    <span className="opacity-0 group-hover:opacity-100 transition-opacity absolute -bottom-5 px-2 py-0.5 rounded bg-slate-900 text-white text-[9px] whitespace-nowrap">
-                      {wp.name}
+                    <div className="w-2.5 h-2.5 rounded-full bg-white border-2 border-purple-500 shadow-sm" />
+                    <span className="opacity-0 group-hover:opacity-100 transition-opacity absolute -bottom-5 px-2 py-0.5 rounded bg-slate-900 text-white text-[9px] font-medium whitespace-nowrap pointer-events-none z-40 shadow-md">
+                      {wp.id}: {wp.name}
                     </span>
                   </div>
                 )}
@@ -1043,10 +1065,24 @@ export default function App() {
                 ? 'bg-purple-50 border-purple-200 text-purple-700'
                 : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
             }`}
-            title="Toggle Waypoints"
+            title="Toggle Waypoints on Map"
           >
             {showWaypoints ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-            <span className="hidden md:inline">Waypoints</span>
+            <span className="hidden md:inline">Waypoints ({routeWaypoints.length})</span>
+          </button>
+
+          {/* Waypoints Manifest Drawer Button */}
+          <button
+            onClick={() => setIsWaypointsDrawerOpen(!isWaypointsDrawerOpen)}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+              isWaypointsDrawerOpen
+                ? 'bg-purple-600 border-purple-600 text-white shadow-md'
+                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+            title="Open Full Voyage Waypoints Manifest"
+          >
+            <Activity className="w-3.5 h-3.5 text-current" />
+            <span className="hidden md:inline">Manifest</span>
           </button>
 
           {/* Center Route Focus */}
@@ -1676,20 +1712,49 @@ export default function App() {
 
             {/* Selected Waypoint Inspection Card */}
             {selectedWaypoint && (
-              <div className="rounded-2xl bg-white/95 backdrop-blur-md border border-purple-200 p-3.5 shadow-lg animate-in fade-in slide-in-from-top-2">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-bold text-purple-900">Waypoint Inspection</span>
+              <div className="rounded-2xl bg-white/95 backdrop-blur-md border border-purple-200 p-4 shadow-xl animate-in fade-in slide-in-from-top-2">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-purple-600 animate-ping" />
+                    <span className="text-xs font-bold text-purple-900">{selectedWaypoint.id}: Waypoint Inspection</span>
+                  </div>
                   <button
                     onClick={() => setSelectedWaypoint(null)}
-                    className="text-[10px] text-slate-400 hover:text-slate-600"
+                    className="text-[11px] text-slate-400 hover:text-slate-700 font-semibold px-1.5 py-0.5 rounded hover:bg-slate-100"
                   >
-                    Close
+                    ✕ Close
                   </button>
                 </div>
-                <p className="text-xs font-semibold text-slate-800 mb-1">{selectedWaypoint.name}</p>
-                <div className="text-[11px] text-slate-500 space-y-0.5">
-                  <div>Speed Restriction: <span className="font-semibold text-purple-700">{selectedWaypoint.speedLimit}</span></div>
-                  <div>Corridor Status: <span className="font-semibold text-slate-700">{selectedWaypoint.status}</span></div>
+                <p className="text-xs font-semibold text-slate-900 mb-2">{selectedWaypoint.name}</p>
+                <div className="text-[11px] text-slate-600 space-y-1.5 bg-purple-50/60 p-2.5 rounded-xl border border-purple-100">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500">Position:</span>
+                    <span className="font-mono font-semibold text-purple-900">
+                      {selectedWaypoint.coords ? `${selectedWaypoint.coords[1].toFixed(3)}°N, ${selectedWaypoint.coords[0].toFixed(3)}°E` : 'N/A'}
+                    </span>
+                  </div>
+                  {selectedWaypoint.distanceFromOriginNm !== undefined && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500">Distance from Origin:</span>
+                      <span className="font-semibold text-slate-800">{selectedWaypoint.distanceFromOriginNm} NM</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500">Speed Restriction:</span>
+                    <span className="font-semibold text-purple-700">{selectedWaypoint.speedLimit}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500">Corridor Status:</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                      selectedWaypoint.isNoiseZone
+                        ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                        : selectedWaypoint.isChokepoint
+                        ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                        : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    }`}>
+                      {selectedWaypoint.status}
+                    </span>
+                  </div>
                 </div>
               </div>
             )}
@@ -1932,6 +1997,102 @@ export default function App() {
           <span>Diagnostics</span>
         </button>
       </div>
+
+      {/* ========================================================================= */}
+      {/* 6. VOYAGE WAYPOINTS MANIFEST MODAL */}
+      {/* ========================================================================= */}
+      {isWaypointsDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-2xl max-h-[85vh] bg-white rounded-2xl shadow-2xl border border-purple-200 flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-purple-50 to-white">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-purple-100 text-purple-700">
+                  <Navigation className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">
+                    Voyage Waypoints Manifest ({routeWaypoints.length} Maritime Nodes)
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Eurostat 2025 Maritime Network • {startPort.name} ➔ {destPort.name} ({distanceNM} NM)
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsWaypointsDrawerOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Scrollable Waypoints List */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-2.5">
+              {routeWaypoints.map((wp) => (
+                <div
+                  key={wp.id}
+                  onClick={() => {
+                    handleSelectWaypoint(wp);
+                    setIsWaypointsDrawerOpen(false);
+                  }}
+                  className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                    selectedWaypoint?.id === wp.id
+                      ? 'bg-purple-50 border-purple-300 ring-2 ring-purple-400 shadow-sm'
+                      : 'bg-white hover:bg-purple-50/50 border-slate-200 hover:border-purple-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-purple-100 text-purple-800 font-mono text-xs font-bold flex items-center justify-center flex-shrink-0">
+                      {wp.id}
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs font-bold text-slate-900">{wp.name}</p>
+                        {wp.isNoiseZone && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                            12 kts Limit
+                          </span>
+                        )}
+                        {wp.isChokepoint && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
+                            Chokepoint
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-0.5">
+                        <span className="font-mono">
+                          {wp.coords ? `${wp.coords[1].toFixed(3)}°N, ${wp.coords[0].toFixed(3)}°E` : ''}
+                        </span>
+                        {wp.distanceFromOriginNm !== undefined && (
+                          <span>• {wp.distanceFromOriginNm} NM from origin</span>
+                        )}
+                        <span>• Status: <strong className="text-slate-700">{wp.status}</strong></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right flex flex-col items-end flex-shrink-0">
+                    <span className="text-[10px] text-slate-400">Speed Limit</span>
+                    <span className="text-xs font-semibold text-purple-700">{wp.speedLimit}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
+              <span>Click any waypoint to inspect and center on map</span>
+              <button
+                onClick={() => setIsWaypointsDrawerOpen(false)}
+                className="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-semibold transition-colors"
+              >
+                Close Manifest
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* 7. API SYSTEM DIAGNOSTICS MODAL */}
