@@ -44,9 +44,7 @@ class GlobalErrorBoundary extends Component {
 }
 
 createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <GlobalErrorBoundary>
-      <App />
-    </GlobalErrorBoundary>
-  </StrictMode>,
-)
+  <GlobalErrorBoundary>
+    <App />
+  </GlobalErrorBoundary>
+);

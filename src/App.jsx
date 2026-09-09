@@ -62,6 +62,8 @@ const CURRENCIES = {
   SGD: { code: 'SGD', symbol: 'S$', rate: 1.34, label: 'SGD (S$)' },
 };
 
+const EMPTY_GEOJSON = { type: 'FeatureCollection', features: [] };
+
 import { GLOBAL_PORTS, searchPorts } from './data/portsData';
 
 const QUICK_COUNTRIES = [
@@ -956,12 +958,22 @@ export default function App() {
           <NavigationControl position="bottom-right" style={{ marginRight: 24, marginBottom: 170 }} />
 
           {/* Glowing Purple/Cyan Sea Path */}
-          {routeGeoJson && (
-            <Source id="user-route" type="geojson" data={routeMode === 'eco' ? routeGeoJson : (directRouteGeoJson || routeGeoJson)}>
-              <Layer {...routeLayers.glow} />
-              <Layer {...routeLayers.core} />
-            </Source>
-          )}
+          <Source id="user-route" type="geojson" data={(routeMode === 'eco' ? routeGeoJson : directRouteGeoJson) || routeGeoJson || EMPTY_GEOJSON}>
+            <Layer {...routeLayers.glow} />
+            <Layer {...routeLayers.core} />
+          </Source>
+
+          {/* Direct Baseline Navigational Track */}
+          <Source id="direct-track" type="geojson" data={directRouteGeoJson || EMPTY_GEOJSON}>
+            <Layer
+              {...routeLayers.directTrack}
+              layout={{
+                'line-join': 'round',
+                'line-cap': 'round',
+                visibility: routeMode === 'direct' ? 'visible' : 'none',
+              }}
+            />
+          </Source>
 
 
 
