@@ -722,6 +722,7 @@ export default function App() {
     const sPort = (customStart && Array.isArray(customStart.coords)) ? customStart : startPort;
     const dPort = (customDest && Array.isArray(customDest.coords)) ? customDest : destPort;
     let computedNM = 10493;
+    let currentStormZone = null;
 
     try {
       const result = await getNavigableSeaRoute(sPort, dPort, API_KEYS.SEAROUTES);
@@ -732,7 +733,10 @@ export default function App() {
         setDistanceNM(computedNM);
         if (result.waypoints) setAllWaypoints(result.waypoints);
         if (result.weatherSavings) setWeatherSavings(result.weatherSavings);
-        if (result.stormZone) setStormZone(result.stormZone);
+        if (result.stormZone) {
+          currentStormZone = result.stormZone;
+          setStormZone(result.stormZone);
+        }
 
         const coords = result.coordinates;
         if (coords && coords.length > 1) {
@@ -797,8 +801,12 @@ export default function App() {
       // ignore
     }
 
-    // Trigger Stormglass Ocean Telemetry fetch with failover
-    refreshOceanData();
+    // Trigger Stormglass Ocean Telemetry fetch with failover for this route's exact swell coordinates
+    if (currentStormZone && currentStormZone.center) {
+      refreshOceanData(currentStormZone.center[1], currentStormZone.center[0]);
+    } else {
+      refreshOceanData();
+    }
 
     setIsOptimizing(false);
   }, [startPort, destPort, selectedShip, cargoWeight, refreshOceanData, fitRouteBounds]);
@@ -950,7 +958,7 @@ export default function App() {
               <div className="relative flex items-center justify-center cursor-pointer group">
                 <div className="absolute -top-7 px-2 py-0.5 rounded-md bg-amber-950/95 border border-amber-500/60 text-[10px] text-amber-300 font-semibold shadow-2xl flex items-center gap-1.5 whitespace-nowrap pointer-events-none">
                   <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                  <span>⚠️ 4.2m Rough Swell (Avoided by AI Eco-Route)</span>
+                  <span>⚠️ {stormZone.waveHeight || 'Oceanic'} (Avoided by AI Eco-Route)</span>
                 </div>
                 <div className="w-8 h-8 rounded-full bg-amber-500/25 border-2 border-amber-400 flex items-center justify-center text-amber-300 shadow-xl">
                   <Waves className="w-4.5 h-4.5 animate-pulse" />
@@ -1156,7 +1164,7 @@ export default function App() {
           {routeMode === 'eco' ? 'AI Eco Route:' : 'Direct Track:'}
         </span>
         <span className="text-slate-300 hidden xl:inline whitespace-nowrap">
-          {routeMode === 'eco' ? 'Bypassing 4.2m Swell' : 'Direct Heavy Seas'}
+          {routeMode === 'eco' ? `Bypassing ${stormZone?.waveHeight ? stormZone.waveHeight.replace(' Rough', '') : '2.8m'} Swell` : 'Direct Heavy Seas'}
         </span>
         <span className={`font-semibold whitespace-nowrap ${routeMode === 'eco' ? 'text-purple-300' : 'text-amber-400'}`}>
           {routeMode === 'eco' ? `(+${weatherSavings.fuelSavingsPercent}% Fuel Saved)` : '(+18% Resistance)'}
