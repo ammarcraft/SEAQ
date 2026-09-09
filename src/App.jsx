@@ -672,6 +672,15 @@ export default function App() {
     ];
   }, [allWaypoints, routeGeoJson, startPort, destPort, selectedShip]);
 
+  // High-performance smooth waypoints for map rendering (prevents DOM lag)
+  const displayedMapWaypoints = useMemo(() => {
+    if (!routeWaypoints || routeWaypoints.length <= 2) return [];
+    const inner = routeWaypoints.slice(1, -1);
+    if (inner.length <= 22) return inner;
+    const step = Math.ceil(inner.length / 20);
+    return inner.filter((wp, i) => i === 0 || i === inner.length - 1 || wp.isNoiseZone || i % step === 0);
+  }, [routeWaypoints]);
+
   const noiseZoneCoords = useMemo(() => {
     const wp3 = routeWaypoints.find(w => w.isNoiseZone) || routeWaypoints[1];
     return wp3 ? wp3.coords : [95.0, 5.0];
@@ -981,38 +990,25 @@ export default function App() {
             </div>
           </Marker>
 
-          {/* ALL MARITIME WAYPOINTS ON MAP */}
-          {showWaypoints && routeWaypoints.slice(1, -1).map((wp) => (
+          {/* ALL MARITIME WAYPOINTS ON MAP (ALL CIRCLES, ZERO CLUTTER, ZERO LAG) */}
+          {showWaypoints && displayedMapWaypoints.map((wp) => (
             <Marker key={wp.id} longitude={wp.coords[0]} latitude={wp.coords[1]} anchor="center">
               <div
                 onClick={() => handleSelectWaypoint(wp)}
-                className={`group relative flex flex-col items-center cursor-pointer transition-transform hover:scale-125 ${
-                  wp.isNoiseZone ? 'z-30' : wp.isChokepoint ? 'z-25' : 'z-20'
-                }`}
+                className="group relative flex flex-col items-center cursor-pointer transition-transform hover:scale-150 z-20"
               >
                 {wp.isNoiseZone ? (
-                  <div className="flex flex-col items-center">
-                    <div className="px-2.5 py-1 rounded-md bg-amber-50 border border-amber-300 text-amber-900 text-[10px] font-semibold shadow-lg whitespace-nowrap mb-1.5 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                      Speed Reduction Zone: 12.0 kts Max
-                    </div>
-                    <div className="relative flex items-center justify-center">
-                      <div className="absolute w-12 h-12 rounded-full bg-amber-500/25 animate-ping" />
-                      <div className="w-6 h-6 rounded-full bg-amber-500 border-2 border-white shadow-xl flex items-center justify-center text-white text-[10px] font-bold">
-                        12
-                      </div>
-                    </div>
-                  </div>
-                ) : wp.isChokepoint ? (
-                  <div className="flex flex-col items-center">
-                    <div className="w-3.5 h-3.5 rounded-sm bg-purple-600 border-2 border-white shadow-md rotate-45 flex items-center justify-center" />
-                    <span className="opacity-0 group-hover:opacity-100 transition-opacity absolute -bottom-5 px-2 py-0.5 rounded bg-slate-900 text-white text-[9px] font-medium whitespace-nowrap pointer-events-none z-40 shadow-md">
-                      {wp.id}: {wp.name}
+                  /* Single Marine Acoustic Sanctuary: Clean amber circle */
+                  <div className="relative flex items-center justify-center">
+                    <div className="w-3.5 h-3.5 rounded-full bg-amber-400 border-2 border-white shadow-md" />
+                    <span className="opacity-0 group-hover:opacity-100 transition-opacity absolute -bottom-6 px-2 py-0.5 rounded bg-amber-900 text-amber-100 text-[9px] font-semibold whitespace-nowrap pointer-events-none z-40 shadow-lg border border-amber-500/50">
+                      ⚡ {wp.id}: {wp.name} ({wp.speedLimit})
                     </span>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center">
-                    <div className="w-2.5 h-2.5 rounded-full bg-white border-2 border-purple-500 shadow-sm" />
+                  /* All Navigational Waypoints: Pure, Clean, Uniform Circles */
+                  <div className="relative flex items-center justify-center">
+                    <div className="w-2.5 h-2.5 rounded-full bg-white border-2 border-purple-600 shadow-sm" />
                     <span className="opacity-0 group-hover:opacity-100 transition-opacity absolute -bottom-5 px-2 py-0.5 rounded bg-slate-900 text-white text-[9px] font-medium whitespace-nowrap pointer-events-none z-40 shadow-md">
                       {wp.id}: {wp.name}
                     </span>
