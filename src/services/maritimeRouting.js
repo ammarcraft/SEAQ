@@ -199,10 +199,15 @@ export function isPointOnLand(lon, lat) {
   if (lon >= 1.0 && lon <= 2.4 && lat >= 50.8 && lat <= 51.4) return false;
   // 7. Iberian / Galician Atlantic deepwater (west of -9.35°W between 36°N and 44.5°N is 100% Atlantic ocean)
   if (lon <= -9.35 && lat >= 36.0 && lat <= 44.5) return false;
+  // 8. Mumbai Harbour & JNPT Navigation Channel (certified deepwater fairway between South Mumbai and JNPT/Uran):
+  if (lon >= 72.855 && lon <= 72.97 && lat >= 18.82 && lat <= 18.98) return false;
+  if (lon >= 72.70 && lon <= 72.86 && lat >= 18.75 && lat <= 18.86) return false;
 
-  // Explicit Coastal Archipelago & Islands (missing from coarse 110m world map):
+  // Explicit Coastal Archipelago & City Peninsulas (missing from coarse 110m world map):
   // 1. Zhoushan & Daishan Archipelago (Dinghai, Daishan, Putuo, Jintang, Ningbo/Beilun coastal headlands)
   if (lon >= 121.60 && lon <= 122.55 && lat >= 29.50 && lat <= 30.45) return true;
+  // 2. South Mumbai City Peninsula (Colaba, Fort, Marine Lines, Kalbadevi, Mazagaon, Parel, Worli):
+  if (lon >= 72.78 && lon <= 72.855 && lat >= 18.88 && lat <= 19.05) return true;
 
   for (let i = 0; i < PRECOMPUTED_POLYGONS.length; i++) {
     const p = PRECOMPUTED_POLYGONS[i];
@@ -593,7 +598,8 @@ export function smoothNauticalPath(points, isEco = true) {
     const isGibraltar = curr[0] >= -6.0 && curr[0] <= -5.0 && curr[1] >= 35.7 && curr[1] <= 36.3;
     const isSingapore = curr[0] >= 103.5 && curr[0] <= 104.2 && curr[1] >= 1.15 && curr[1] <= 1.45;
     const isZhoushanFairway = curr[0] >= 121.5 && curr[0] <= 124.0 && curr[1] >= 29.0 && curr[1] <= 31.0;
-    const isNarrow = isSuez || isGibraltar || isSingapore || isZhoushanFairway;
+    const isMumbaiHarbour = curr[0] >= 72.70 && curr[0] <= 73.00 && curr[1] >= 18.75 && curr[1] <= 19.05;
+    const isNarrow = isSuez || isGibraltar || isSingapore || isZhoushanFairway || isMumbaiHarbour;
 
     if (isNarrow) {
       result.push(curr);
@@ -739,6 +745,64 @@ function spliceShanghaiFairway(coords, isSouthboundDeparture = true) {
     const joinIdx = coords.findLastIndex ? coords.findLastIndex(c => c[0] <= 115.0 && c[1] <= 22.0) : -1;
     if (joinIdx !== -1) {
       return [...coords.slice(0, joinIdx), ...revFairway];
+    }
+  }
+  return coords;
+}
+
+// Ultra-Precision Mumbai Harbour & JNPT (Nhava Sheva) Deepwater Fairway
+// 100% Waterway: Strictly traverses Mumbai Harbour main dredged channel between South Mumbai and Uran,
+// rounds south of Colaba Point / Prongs Reef into open Arabian Sea. NEVER touches Parel, Mazagaon, Kalbadevi, or Colaba!
+const MUMBAI_WEST_FAIRWAY = [
+  [72.950, 18.950], // JNPT Nhava Sheva Container Terminal Berth
+  [72.910, 18.935], // JNPT Exit Fairway
+  [72.870, 18.905], // Mumbai Harbour Deepwater Channel (East of Middle Ground / Sunk Rock)
+  [72.835, 18.845], // South of Colaba Point / Prongs Lighthouse Fairway
+  [72.760, 18.800], // Mumbai Outer Pilot Station (Open Arabian Sea)
+  [72.400, 18.780], // Arabian Sea Commercial Shipping Corridor
+  [71.500, 18.750], // Deep Arabian Sea Fairway (towards Bab-el-Mandeb / Suez / Gulf)
+];
+
+const MUMBAI_SOUTH_FAIRWAY = [
+  [72.950, 18.950], // JNPT Nhava Sheva Container Terminal Berth
+  [72.910, 18.935], // JNPT Exit Fairway
+  [72.870, 18.905], // Mumbai Harbour Deepwater Channel
+  [72.835, 18.845], // South of Colaba Point / Prongs Lighthouse Fairway
+  [72.780, 18.800], // Mumbai Outer Pilot Station
+  [73.100, 15.500], // Offshore Konkan / Goa Deepwater Lane
+];
+
+function spliceMumbaiFairway(coords, startCoords, destCoords) {
+  const isMumbaiStart = (startCoords[0] >= 72.8 && startCoords[0] <= 73.1 && startCoords[1] >= 18.8 && startCoords[1] <= 19.1);
+  const isMumbaiDest = (destCoords[0] >= 72.8 && destCoords[0] <= 73.1 && destCoords[1] >= 18.8 && destCoords[1] <= 19.1);
+
+  if (isMumbaiStart) {
+    const isWestbound = destCoords[0] < 70.0;
+    if (isWestbound) {
+      const joinIdx = coords.findIndex(c => c[0] <= 71.0);
+      if (joinIdx !== -1) {
+        return [...MUMBAI_WEST_FAIRWAY, ...coords.slice(joinIdx)];
+      }
+    } else {
+      const joinIdx = coords.findIndex(c => c[1] <= 16.0);
+      if (joinIdx !== -1) {
+        return [...MUMBAI_SOUTH_FAIRWAY, ...coords.slice(joinIdx)];
+      }
+    }
+  } else if (isMumbaiDest) {
+    const isFromWest = startCoords[0] < 70.0;
+    if (isFromWest) {
+      const rev = [...MUMBAI_WEST_FAIRWAY].reverse();
+      const joinIdx = coords.findLastIndex ? coords.findLastIndex(c => c[0] <= 71.0) : -1;
+      if (joinIdx !== -1) {
+        return [...coords.slice(0, joinIdx + 1), ...rev];
+      }
+    } else {
+      const rev = [...MUMBAI_SOUTH_FAIRWAY].reverse();
+      const joinIdx = coords.findLastIndex ? coords.findLastIndex(c => c[1] <= 16.0) : -1;
+      if (joinIdx !== -1) {
+        return [...coords.slice(0, joinIdx + 1), ...rev];
+      }
     }
   }
   return coords;
@@ -1091,10 +1155,18 @@ export async function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMo
   // Precision Shanghai Yangshan Outer Fairway Splice (clears Zhoushan Island, Dinghai, Daishan):
   const isShanghaiStart = (startCoords[0] >= 121.8 && startCoords[0] <= 122.4 && startCoords[1] >= 30.3 && startCoords[1] <= 31.0);
   const isShanghaiDest = (destCoords[0] >= 121.8 && destCoords[0] <= 122.4 && destCoords[1] >= 30.3 && destCoords[1] <= 31.0);
-  if (isShanghaiStart && destCoords[1] < 30.0) {
+  const isSouthbound = coords.some(c => c[0] <= 118.0 && c[1] <= 24.0);
+  if (isShanghaiStart && isSouthbound) {
     coords = spliceShanghaiFairway(coords, true);
-  } else if (isShanghaiDest && startCoords[1] < 30.0) {
+  } else if (isShanghaiDest && isSouthbound) {
     coords = spliceShanghaiFairway(coords, false);
+  }
+
+  // Precision Mumbai JNPT Deepwater Fairway Splice (clears South Mumbai, Kalbadevi, Colaba):
+  const isMumbaiStart = (startCoords[0] >= 72.8 && startCoords[0] <= 73.1 && startCoords[1] >= 18.8 && startCoords[1] <= 19.1);
+  const isMumbaiDest = (destCoords[0] >= 72.8 && destCoords[0] <= 73.1 && destCoords[1] >= 18.8 && destCoords[1] <= 19.1);
+  if (isMumbaiStart || isMumbaiDest) {
+    coords = spliceMumbaiFairway(coords, startCoords, destCoords);
   }
 
   // Precision Suez Dredged Fairway Splice:
