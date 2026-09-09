@@ -433,6 +433,11 @@ export default function App() {
     window.__mapRef = mapRef;
   }, []);
 
+  const isLeftOpenRef = useRef(isLeftOpen);
+  isLeftOpenRef.current = isLeftOpen;
+  const isRightOpenRef = useRef(isRightOpen);
+  isRightOpenRef.current = isRightOpen;
+
   const fitRouteBounds = useCallback(
     (coords) => {
       if (!mapRef.current || !coords || coords.length === 0) return;
@@ -450,7 +455,7 @@ export default function App() {
             [maxLng, maxLat],
           ],
           {
-            padding: { top: 100, bottom: 100, left: isLeftOpen ? 400 : 70, right: isRightOpen ? 440 : 70 },
+            padding: { top: 100, bottom: 100, left: isLeftOpenRef.current ? 400 : 70, right: isRightOpenRef.current ? 440 : 70 },
             duration: 1500,
             pitch: 28,
           }
@@ -459,7 +464,7 @@ export default function App() {
         console.warn('[Map] Fit bounds error:', e);
       }
     },
-    [isLeftOpen, isRightOpen]
+    []
   );
 
   // Form Inputs
@@ -572,12 +577,15 @@ export default function App() {
     return Math.max(0, Math.round(baseCo2eTonnes * scale));
   }, [baseCo2eTonnes, effectiveCarbonFactor]);
 
+  const vesselPositionRef = useRef(vesselPosition);
+  vesselPositionRef.current = vesselPosition;
+
   // Fetch Stormglass Ocean Swell Telemetry with 6-key failover (Pure backend execution)
   const refreshOceanData = useCallback(async (targetLat, targetLon) => {
     setIsRefreshingOcean(true);
     try {
-      const lat = targetLat !== undefined ? targetLat : vesselPosition[1] || 11.5;
-      const lon = targetLon !== undefined ? targetLon : vesselPosition[0] || 65.0;
+      const lat = targetLat !== undefined ? targetLat : vesselPositionRef.current[1] || 11.5;
+      const lon = targetLon !== undefined ? targetLon : vesselPositionRef.current[0] || 65.0;
       const data = await fetchStormglassDataWithFailover(lat, lon);
       setLiveOceanData(data);
     } catch (err) {
@@ -585,7 +593,7 @@ export default function App() {
     } finally {
       setIsRefreshingOcean(false);
     }
-  }, [vesselPosition]);
+  }, []);
 
   // Map camera
   const [viewState, setViewState] = useState({
@@ -800,9 +808,16 @@ export default function App() {
     window.__setStartPort = (p) => { setStartPort(p); setStartQuery(p.name); };
     window.__setDestPort = (p) => { setDestPort(p); setDestQuery(p.name); };
     window.__GLOBAL_PORTS = GLOBAL_PORTS;
-    calculateRoute();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calculateRoute]);
+
+  const initialCalcDoneRef = useRef(false);
+  useEffect(() => {
+    if (!initialCalcDoneRef.current) {
+      initialCalcDoneRef.current = true;
+      calculateRoute();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const transitHours = distanceNM / selectedShip.speedKts;
   const transitDays = (transitHours / 24).toFixed(1);
