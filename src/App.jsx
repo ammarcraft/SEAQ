@@ -455,9 +455,10 @@ export default function App() {
             [maxLng, maxLat],
           ],
           {
-            padding: { top: 100, bottom: 100, left: isLeftOpenRef.current ? 400 : 70, right: isRightOpenRef.current ? 440 : 70 },
-            duration: 1500,
-            pitch: 28,
+            padding: { top: 80, bottom: 80, left: isLeftOpenRef.current ? 340 : 60, right: isRightOpenRef.current ? 350 : 60 },
+            duration: 1200,
+            maxZoom: 5.8,
+            pitch: 24,
           }
         );
       } catch (e) {
@@ -962,12 +963,7 @@ export default function App() {
             </Source>
           )}
 
-          {/* Direct Baseline Navigational Track (Dashed Amber) for Weather Comparison */}
-          {directRouteGeoJson && routeMode === 'eco' && (
-            <Source id="direct-track" type="geojson" data={directRouteGeoJson}>
-              <Layer {...routeLayers.directTrack} />
-            </Source>
-          )}
+
 
           {/* High Swell Avoidance Zone Marker on Map (Yellow circle anchored dead-center on coordinates) */}
           {stormZone && (
@@ -984,28 +980,18 @@ export default function App() {
             </Marker>
           )}
 
-          {/* START POINT: CLEAN STANDALONE DEPARTURE ARROW (NO CIRCLE) */}
-          <Marker longitude={startPort.coords[0]} latitude={startPort.coords[1]} anchor="center">
+          {/* START POINT: PROFESSIONAL NAUTICAL DEPARTURE BEACON (CLEAR CIRCULAR PIN) */}
+          <Marker longitude={startPort.coords[0]} latitude={startPort.coords[1]} anchor="bottom">
             <div className="flex flex-col items-center cursor-pointer select-none">
-              <div className="px-2.5 py-1 rounded-md bg-white text-[11px] font-medium text-slate-800 shadow-md border border-purple-200 mb-1.5 whitespace-nowrap flex items-center gap-1">
+              <div className="px-2.5 py-1 rounded-md bg-white text-[11px] font-semibold text-slate-800 shadow-md border border-emerald-300 mb-1.5 whitespace-nowrap flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
                 <span>Start: {startPort.name}</span>
               </div>
-              <div
-                className="transition-transform duration-500 filter drop-shadow-[0_2px_10px_rgba(168,85,247,0.9)] hover:scale-110"
-                style={{
-                  transform: `rotate(${departureAngle}deg)`,
-                  transformOrigin: '14px 14px',
-                }}
-              >
-                <svg viewBox="0 0 28 28" className="w-7 h-7">
-                  <path
-                    d="M14 2L25 24L14 19L3 24L14 2Z"
-                    fill="#a855f7"
-                    stroke="#ffffff"
-                    strokeWidth="2"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+              <div className="relative flex items-center justify-center">
+                <span className="absolute w-6 h-6 rounded-full bg-emerald-400/40 animate-ping" />
+                <div className="w-5 h-5 rounded-full bg-emerald-500 border-2 border-white shadow-lg flex items-center justify-center text-white text-[10px] font-bold">
+                  ⚓
+                </div>
               </div>
             </div>
           </Marker>

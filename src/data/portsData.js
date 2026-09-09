@@ -4,7 +4,7 @@
  * Supports intelligent multi-port country search (e.g. typing 'India', 'China', 'USA', 'UAE').
  */
 
-export const GLOBAL_PORTS = [
+const RAW_PORTS = [
   // ==========================================
   // INDIA 🇮🇳 (Major Commercial & Deepwater Ports)
   // ==========================================
@@ -1606,9 +1606,22 @@ export const GLOBAL_PORTS = [
     portType: "Irish Premier Commercial Gateway",
     continent: "Europe",
     isEurope: true,
-    coords: [-6.21,53.35],
+    coords: [-6.21, 53.35],
   },
 ];
+
+// Deduplicate by port ID so React keys and lookups are 100% unique
+export const GLOBAL_PORTS = (() => {
+  const seen = new Set();
+  const deduped = [];
+  for (const p of RAW_PORTS) {
+    if (!seen.has(p.id)) {
+      seen.add(p.id);
+      deduped.push(p);
+    }
+  }
+  return deduped;
+})();
 
 /**
  * Intelligent Port & Country Search
