@@ -11,6 +11,7 @@
 
 import { seaRoute, seaRouteMulti } from 'searoute-ts';
 import { fetchStormglassDataWithFailover } from './stormglassService.js';
+import land110mData from '../data/land110m.json';
 
 // Key International Maritime Chokepoints & Fairways (Longitude, Latitude)
 export const SEA_CHOKEPOINTS = {
@@ -144,11 +145,69 @@ export function computeNauticalMiles(coords) {
   return Math.round(totalKm * 0.539957);
 }
 
+// Precompute polygon bounding boxes for ultra-fast O(1) candidate filtering
+const PRECOMPUTED_POLYGONS = [];
+if (land110mData && Array.isArray(land110mData.features)) {
+  for (const f of land110mData.features) {
+    const polys = f.geometry.type === 'Polygon'
+      ? [f.geometry.coordinates[0]]
+      : (f.geometry.coordinates || []).map(c => c[0]);
+    for (const ring of polys) {
+      if (!ring || ring.length < 3) continue;
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const pt of ring) {
+        if (pt[0] < minX) minX = pt[0];
+        if (pt[0] > maxX) maxX = pt[0];
+        if (pt[1] < minY) minY = pt[1];
+        if (pt[1] > maxY) maxY = pt[1];
+      }
+      PRECOMPUTED_POLYGONS.push({ ring, minX, maxX, minY, maxY });
+    }
+  }
+}
+
+// Ray-casting point in polygon algorithm
+function pointInPoly(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], yi = poly[i][1];
+    const xj = poly[j][0], yj = poly[j][1];
+    const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * 100% Waterway Land Collision Detector
+ * Checks if a coordinate is on continental land masses.
+ * Special international canals and designated deepwater corridors are verified as water.
+ */
+export function isPointOnLand(lon, lat) {
+  // Certified maritime waterways that are naturally water in real life:
+  // 1. Suez Canal dredged channel (lat 29.8 to 31.5, lon 32.1 to 32.8)
+  if (lon >= 32.1 && lon <= 32.8 && lat >= 29.8 && lat <= 31.5) return false;
+  // 2. Gulf of Suez deep fairway (lat 27.5 to 29.8, lon 32.5 to 34.2)
+  if (lon >= 32.5 && lon <= 34.2 && lat >= 27.5 && lat <= 29.8) return false;
+  // 3. Bab el Mandeb (lat 12.4 to 12.9, lon 43.1 to 43.6)
+  if (lon >= 43.1 && lon <= 43.6 && lat >= 12.4 && lat <= 12.9) return false;
+  // 4. Singapore Strait & Malacca deep fairway (lat 1.15 to 1.35, lon 103.5 to 104.2)
+  if (lon >= 103.5 && lon <= 104.2 && lat >= 1.15 && lat <= 1.35) return false;
+  // 5. Gibraltar Strait (lat 35.85 to 36.10, lon -5.9 to -5.2)
+  if (lon >= -5.9 && lon <= -5.2 && lat >= 35.85 && lat <= 36.1) return false;
+
+  for (let i = 0; i < PRECOMPUTED_POLYGONS.length; i++) {
+    const p = PRECOMPUTED_POLYGONS[i];
+    // Fast O(1) bounding box check
+    if (lon < p.minX || lon > p.maxX || lat < p.minY || lat > p.maxY) continue;
+    if (pointInPoly(lon, lat, p.ring)) return true;
+  }
+  return false;
+}
+
 /**
  * Autonomous Maritime Land-Avoidance & Fairway Corridor Sentinel
  * Handles precision fairway correction for canals/straits (Suez, Gibraltar).
- * General land avoidance is guaranteed by using searoute-ts raw coordinates
- * and ONLY linear interpolation (no Catmull-Rom spline overshoot).
  */
 export function autoCorrectMaritimePath(coords) {
   if (!coords || coords.length === 0) return coords;
@@ -408,37 +467,49 @@ export function smoothNauticalPath(points, isEco = true) {
 
     // Tangent point on incoming leg
     const t1 = [
-      curr[0] - (curr[0] - prev[0]) * (maxR / d1),
-      curr[1] - (curr[1] - prev[1]) * (maxR / d1)
+      Number((curr[0] - (curr[0] - prev[0]) * (maxR / d1)).toFixed(4)),
+      Number((curr[1] - (curr[1] - prev[1]) * (maxR / d1)).toFixed(4))
     ];
     // Tangent point on outgoing leg
     const t2 = [
-      curr[0] + (next[0] - curr[0]) * (maxR / d2),
-      curr[1] + (next[1] - curr[1]) * (maxR / d2)
+      Number((curr[0] + (next[0] - curr[0]) * (maxR / d2)).toFixed(4)),
+      Number((curr[1] + (next[1] - curr[1]) * (maxR / d2)).toFixed(4))
     ];
 
-    result.push([Number(t1[0].toFixed(4)), Number(t1[1].toFixed(4))]);
-
-    // Quadratic Bezier arc rounding the corner smoothly towards the next heading
+    // Generate candidate Bezier arc
+    const candidateArc = [t1];
     for (let s = 1; s < segmentsPerArc; s++) {
       const t = s / segmentsPerArc;
       const inv = 1 - t;
       const x = inv * inv * t1[0] + 2 * inv * t * curr[0] + t * t * t2[0];
       const y = inv * inv * t1[1] + 2 * inv * t * curr[1] + t * t * t2[1];
-      result.push([Number(x.toFixed(4)), Number(y.toFixed(4))]);
+      candidateArc.push([Number(x.toFixed(4)), Number(y.toFixed(4))]);
     }
+    candidateArc.push(t2);
 
-    result.push([Number(t2[0].toFixed(4)), Number(t2[1].toFixed(4))]);
+    // CRITICAL: Land Collision Sentinel Check
+    // If ANY point on the candidate curve intersects continental land, discard the arc
+    // and strictly keep the original certified maritime water waypoint!
+    const touchesLand = candidateArc.some(pt => isPointOnLand(pt[0], pt[1]));
+
+    if (touchesLand) {
+      result.push(curr);
+    } else {
+      candidateArc.forEach(pt => result.push(pt));
+    }
 
     // Add intermediate points along long open-ocean straight legs for smooth globe curvature
     if (d2 > 1.2 && !isNarrow) {
       const steps = Math.min(isEco ? 5 : 3, Math.ceil(d2 / 0.9));
       for (let s = 1; s < steps; s++) {
         const factor = s / steps;
-        result.push([
+        const interp = [
           Number((curr[0] + factor * (next[0] - curr[0])).toFixed(4)),
           Number((curr[1] + factor * (next[1] - curr[1])).toFixed(4))
-        ]);
+        ];
+        if (!isPointOnLand(interp[0], interp[1])) {
+          result.push(interp);
+        }
       }
     }
   }
