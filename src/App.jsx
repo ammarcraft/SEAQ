@@ -819,6 +819,7 @@ export default function App() {
     window.__calculateRoute = calculateRoute;
     window.__setStartPort = (p) => { setStartPort(p); setStartQuery(p.name); };
     window.__setDestPort = (p) => { setDestPort(p); setDestQuery(p.name); };
+    window.__setViewState = setViewState;
     window.__GLOBAL_PORTS = GLOBAL_PORTS;
   }, [calculateRoute]);
 
