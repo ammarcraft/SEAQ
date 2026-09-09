@@ -538,6 +538,12 @@ export default function App() {
   const [distanceNM, setDistanceNM] = useState(10493);
   const [routeGeoJson, setRouteGeoJson] = useState(null);
   const [directRouteGeoJson, setDirectRouteGeoJson] = useState(null);
+  const [showAltRoutes, setShowAltRoutes] = useState(true);
+  const [secaRouteGeoJson, setSecaRouteGeoJson] = useState(null);
+  const [hraRouteGeoJson, setHraRouteGeoJson] = useState(null);
+  const [secaDistanceNM, setSecaDistanceNM] = useState(11850);
+  const [hraDistanceNM, setHraDistanceNM] = useState(14046);
+  const [engineStatus, setEngineStatus] = useState('offline_marnet'); // 'offline_marnet' | 'live_api'
   const [routeMode, setRouteMode] = useState('eco'); // 'eco' | 'direct'
   const [weatherSavings, setWeatherSavings] = useState({
     fuelSavingsPercent: 14.2,
@@ -732,8 +738,13 @@ export default function App() {
       if (result && result.ecoGeoJson) {
         setRouteGeoJson(result.ecoGeoJson);
         setDirectRouteGeoJson(result.directGeoJson);
+        if (result.secaGeoJson) setSecaRouteGeoJson(result.secaGeoJson);
+        if (result.hraGeoJson) setHraRouteGeoJson(result.hraGeoJson);
         computedNM = result.distanceNM;
         setDistanceNM(computedNM);
+        if (result.secaDistanceNM) setSecaDistanceNM(result.secaDistanceNM);
+        if (result.hraDistanceNM) setHraDistanceNM(result.hraDistanceNM);
+        if (result.engineStatus) setEngineStatus(result.engineStatus);
         if (result.waypoints) setAllWaypoints(result.waypoints);
         if (result.weatherSavings) setWeatherSavings(result.weatherSavings);
         if (result.stormZone) {
@@ -917,9 +928,37 @@ export default function App() {
           'line-color': '#f59e0b', // Amber dashed baseline track
           'line-width': 2,
           'line-dasharray': [3, 2],
-          'line-opacity': 0.85
-        }
-      }
+          'line-opacity': 0.85,
+        },
+      },
+      secaTrack: {
+        id: 'seca-track-line',
+        type: 'line',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round',
+        },
+        paint: {
+          'line-color': '#38bdf8', // Sky / Cyan dashed line
+          'line-width': 2.5,
+          'line-dasharray': [3, 2],
+          'line-opacity': 0.85,
+        },
+      },
+      hraTrack: {
+        id: 'hra-track-line',
+        type: 'line',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round',
+        },
+        paint: {
+          'line-color': '#94a3b8', // Slate dashed line (Cape of Good Hope route)
+          'line-width': 2.5,
+          'line-dasharray': [2, 2],
+          'line-opacity': 0.85,
+        },
+      },
     };
   }, []);
 
@@ -970,10 +1009,45 @@ export default function App() {
               layout={{
                 'line-join': 'round',
                 'line-cap': 'round',
-                visibility: routeMode === 'direct' ? 'visible' : 'none',
+                visibility: (showAltRoutes || routeMode === 'direct') ? 'visible' : 'none',
               }}
             />
           </Source>
+
+          {/* SECA-Avoidant Alternative Corridor (Dotted Sky/Cyan Line) */}
+          <Source id="seca-route" type="geojson" data={secaRouteGeoJson || EMPTY_GEOJSON}>
+            <Layer
+              {...routeLayers.secaTrack}
+              layout={{
+                'line-join': 'round',
+                'line-cap': 'round',
+                visibility: showAltRoutes ? 'visible' : 'none',
+              }}
+            />
+          </Source>
+
+          {/* HRA-Avoidant Alternative Corridor (Cape of Good Hope Dotted Slate Line) */}
+          <Source id="hra-route" type="geojson" data={hraRouteGeoJson || EMPTY_GEOJSON}>
+            <Layer
+              {...routeLayers.hraTrack}
+              layout={{
+                'line-join': 'round',
+                'line-cap': 'round',
+                visibility: showAltRoutes ? 'visible' : 'none',
+              }}
+            />
+          </Source>
+
+          {/* Speed Reduction Zone Badge on Suez Canal (as shown in SIH Demo) */}
+          {((startPort?.coords?.[0] > 35 && destPort?.coords?.[0] < 30) || (startPort?.coords?.[0] < 30 && destPort?.coords?.[0] > 35)) && (
+            <Marker longitude={32.55} latitude={30.0} anchor="center">
+              <div className="px-2 py-1 rounded-lg bg-amber-950/95 border border-amber-500/70 text-[10px] font-semibold text-amber-300 shadow-2xl flex items-center gap-1.5 whitespace-nowrap pointer-events-none">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                <span>Speed Reduction Zone: 12.0 kts Max</span>
+                <span className="text-[10px]">⚓</span>
+              </div>
+            </Marker>
+          )}
 
 
 
@@ -1062,19 +1136,25 @@ export default function App() {
       {/* 2. TOP HEADER (CURRENCY SELECTOR & SCREEN CLEAR CONTROLS) */}
       {/* ========================================================================= */}
       <header className="absolute top-2 sm:top-4 left-2 right-2 sm:left-6 sm:right-6 z-30 flex items-center justify-between px-3 sm:px-5 py-2 sm:py-2.5 rounded-2xl bg-white/95 backdrop-blur-md border border-purple-100 shadow-md">
-        <div className="flex items-center gap-2 sm:gap-2.5">
+        <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0">
           <img
             src="/seaq-logo.jpg"
             alt="SEAQ Logo"
             className="w-7 h-7 sm:w-8 sm:h-8 object-contain rounded-lg shadow-sm"
           />
-          <h1 className="text-sm sm:text-base font-black tracking-wider text-slate-900">
-            SEAQ
-          </h1>
+          <div className="flex items-center gap-1.5">
+            <h1 className="text-sm sm:text-base font-black tracking-wider text-slate-900">
+              SEAQ
+            </h1>
+            <span className="hidden xs:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>{engineStatus === 'live_api' ? 'SeaRoutes Live' : 'Offline MARNET'}</span>
+            </span>
+          </div>
         </div>
 
-        {/* Global Toolbar: Currency Switcher + Full Map Focus + Waypoint Controls */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* Global Toolbar: Currency Switcher + Alt Routes + Desktop Controls */}
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
           {/* CURRENCY SELECTOR */}
           <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700">
             <span className="text-slate-400 font-medium text-[10px] sm:text-[11px]">Cur:</span>
@@ -1091,10 +1171,24 @@ export default function App() {
             </select>
           </div>
 
-          {/* Waypoints Toggle */}
+          {/* Alt Routes Toggle (Visible on mobile & desktop) */}
+          <button
+            onClick={() => setShowAltRoutes(!showAltRoutes)}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+              showAltRoutes
+                ? 'bg-cyan-50 border-cyan-300 text-cyan-700 shadow-sm'
+                : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+            }`}
+            title="Toggle All Possible Candidate Corridors"
+          >
+            <span className={`w-2 h-2 rounded-full ${showAltRoutes ? 'bg-cyan-500 animate-pulse' : 'bg-slate-400'}`} />
+            <span>Alt Routes</span>
+          </button>
+
+          {/* Waypoints Toggle (hidden on small mobile screens) */}
           <button
             onClick={() => setShowWaypoints(!showWaypoints)}
-            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+            className={`hidden sm:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
               showWaypoints
                 ? 'bg-purple-50 border-purple-200 text-purple-700'
                 : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
@@ -1105,10 +1199,10 @@ export default function App() {
             <span className="hidden md:inline">Waypoints ({routeWaypoints.length})</span>
           </button>
 
-          {/* Waypoints Manifest Drawer Button */}
+          {/* Waypoints Manifest Drawer Button (hidden on mobile) */}
           <button
             onClick={() => setIsWaypointsDrawerOpen(!isWaypointsDrawerOpen)}
-            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+            className={`hidden sm:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
               isWaypointsDrawerOpen
                 ? 'bg-purple-600 border-purple-600 text-white shadow-md'
                 : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
@@ -1119,48 +1213,35 @@ export default function App() {
             <span className="hidden md:inline">Manifest</span>
           </button>
 
-          {/* Center Route Focus */}
+          {/* Center Route Focus (hidden on mobile) */}
           <button
             onClick={() => {
               if (routeGeoJson?.geometry?.coordinates) {
                 fitRouteBounds(routeGeoJson.geometry.coordinates);
               }
             }}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-white hover:bg-purple-50 border border-purple-200 text-purple-700 text-xs font-medium transition-colors shadow-sm"
+            className="hidden sm:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-white hover:bg-purple-50 border border-purple-200 text-purple-700 text-xs font-medium transition-colors shadow-sm"
             title="Auto-center camera on the active voyage route"
           >
             <Navigation className="w-3.5 h-3.5 text-purple-600" />
             <span className="hidden md:inline">Center Route</span>
           </button>
 
-          {/* LIVE SEA STATE & OCEAN WAVES */}
+          {/* LIVE SEA STATE & OCEAN WAVES (hidden on mobile) */}
           <button
             onClick={() => refreshOceanData()}
             disabled={isRefreshingOcean}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium border bg-white hover:bg-purple-50 border-purple-200 text-purple-700 transition-colors shadow-sm disabled:opacity-50"
+            className="hidden sm:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium border bg-white hover:bg-purple-50 border-purple-200 text-purple-700 transition-colors shadow-sm disabled:opacity-50"
             title={`Ocean Swell: ${liveOceanData?.waveHeight || '0.8'}m. Click to refresh.`}
           >
             <Waves className={`w-3.5 h-3.5 text-purple-600 ${isRefreshingOcean ? 'animate-pulse' : ''}`} />
             <span className="hidden sm:inline">Waves: {liveOceanData?.waveHeight || '0.8'}m</span>
           </button>
 
-          {/* API DIAGNOSTICS & TELEMETRY MONITOR (NO KEY LEAKS!) */}
-          <button
-            onClick={() => setIsDiagnosticsOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-purple-500/40 text-purple-300 text-xs font-semibold transition-all shadow-sm group"
-            title="System API Health & Diagnostics"
-          >
-            <Activity className="w-3.5 h-3.5 text-purple-400 group-hover:animate-spin" />
-            <span className="hidden sm:inline">Diagnostics</span>
-            <span className="text-[10px] px-1 py-0.2 rounded bg-purple-950 text-purple-300 font-mono border border-purple-700/50">
-              ⚡
-            </span>
-          </button>
-
           {/* FULL MAP VIEW TOGGLE */}
           <button
             onClick={toggleMapFocus}
-            className={`hidden sm:flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+            className={`hidden md:flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
               isFullMapView
                 ? 'bg-purple-600 border-purple-600 text-white shadow-md'
                 : 'bg-white hover:bg-slate-50 border-purple-200 text-purple-700'
@@ -1979,6 +2060,26 @@ export default function App() {
                 );
               })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MULTI-VARIANT ROUTE LEGEND (PRIMARY / SECA / HRA CORRIDORS) */}
+      {/* ========================================================================= */}
+      {showAltRoutes && (
+        <div className="absolute bottom-20 md:bottom-6 left-3 md:left-6 z-20 flex flex-col gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-slate-950/90 backdrop-blur-md border border-slate-800 shadow-2xl text-[10px] sm:text-xs select-none pointer-events-auto max-w-[92vw] sm:max-w-md">
+          <div className="flex items-center gap-2 font-bold text-purple-300">
+            <span className="w-5 h-0.5 bg-gradient-to-r from-cyan-400 to-purple-500 rounded flex-shrink-0" />
+            <span className="truncate">— Primary Route ({distanceNM?.toLocaleString()} NM)</span>
+          </div>
+          <div className="flex items-center gap-2 font-medium text-sky-400">
+            <span className="w-5 border-t-2 border-dashed border-sky-400 flex-shrink-0" />
+            <span className="truncate">- - SECA-Avoidant Route (North of Scotland) ({secaDistanceNM?.toLocaleString()} NM)</span>
+          </div>
+          <div className="flex items-center gap-2 font-medium text-slate-400">
+            <span className="w-5 border-t-2 border-dashed border-slate-400 flex-shrink-0" />
+            <span className="truncate">- - HRA-Avoidant Route (via Cape of Good Hope) ({hraDistanceNM?.toLocaleString()} NM)</span>
           </div>
         </div>
       )}
