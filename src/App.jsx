@@ -944,16 +944,16 @@ export default function App() {
             </Source>
           )}
 
-          {/* High Swell Avoidance Zone Marker on Map */}
+          {/* High Swell Avoidance Zone Marker on Map (Yellow circle anchored dead-center on coordinates) */}
           {stormZone && (
             <Marker longitude={stormZone.center[0]} latitude={stormZone.center[1]} anchor="center">
-              <div className="flex flex-col items-center cursor-pointer group">
-                <div className="px-2 py-0.5 rounded-md bg-amber-950/95 border border-amber-500/60 text-[10px] text-amber-300 font-semibold shadow-2xl flex items-center gap-1.5 whitespace-nowrap mb-1">
+              <div className="relative flex items-center justify-center cursor-pointer group">
+                <div className="absolute -top-7 px-2 py-0.5 rounded-md bg-amber-950/95 border border-amber-500/60 text-[10px] text-amber-300 font-semibold shadow-2xl flex items-center gap-1.5 whitespace-nowrap pointer-events-none">
                   <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
                   <span>⚠️ 4.2m Rough Swell (Avoided by AI Eco-Route)</span>
                 </div>
-                <div className="w-7 h-7 rounded-full bg-amber-500/20 border border-amber-500/60 flex items-center justify-center text-amber-400 shadow-xl">
-                  <Waves className="w-4 h-4 animate-pulse" />
+                <div className="w-8 h-8 rounded-full bg-amber-500/25 border-2 border-amber-400 flex items-center justify-center text-amber-300 shadow-xl">
+                  <Waves className="w-4.5 h-4.5 animate-pulse" />
                 </div>
               </div>
             </Marker>

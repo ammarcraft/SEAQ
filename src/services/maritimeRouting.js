@@ -497,23 +497,37 @@ function generateWaypointsManifest(coords, startPort, destPort, passages) {
  * Builds realistic sea route using Eurostat 2025 global maritime network (searoute-ts)
  * Guarantees 100% unbroken, continuous sea water traversal with zero backtracking spurs.
  */
-export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = true) {
+export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = true, viaCoord = null) {
   const startCoords = startPort.coords;
   const destCoords = destPort.coords;
 
   let rawRoute = null;
 
-  try {
-    rawRoute = seaRoute(startCoords, destCoords, {
-      appendOriginDestination: true,
-      returnPassages: true,
-    });
-  } catch (e) {
-    console.warn('[searoute-ts] Direct graph path error, using fallback:', e);
-    rawRoute = {
-      geometry: { coordinates: [startCoords, destCoords] },
-      properties: { passages: [], length: 0 },
-    };
+  if (viaCoord) {
+    try {
+      rawRoute = seaRouteMulti([startCoords, viaCoord, destCoords], {
+        appendOriginDestination: true,
+        returnPassages: true,
+      });
+    } catch (e) {
+      console.warn('[searoute-ts] Multi waypoint route error:', e);
+      rawRoute = null;
+    }
+  }
+
+  if (!rawRoute) {
+    try {
+      rawRoute = seaRoute(startCoords, destCoords, {
+        appendOriginDestination: true,
+        returnPassages: true,
+      });
+    } catch (e) {
+      console.warn('[searoute-ts] Direct graph path error, using fallback:', e);
+      rawRoute = {
+        geometry: { coordinates: [startCoords, destCoords] },
+        properties: { passages: [], length: 0 },
+      };
+    }
   }
 
   let coords = rawRoute.geometry.coordinates || [startCoords, destCoords];
@@ -559,21 +573,53 @@ export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = t
  * Main Oceanic Route Resolver with Weather Routing Alternatives & Full Waypoints
  */
 export function getNavigableSeaRoute(startPort, destPort, apiKey) {
-  // 1. Generate both routes: AI Eco-Weather Optimized & Baseline Direct Track
-  const ecoRoute = buildRealisticSeaRoute(startPort, destPort, true);
-  const directRoute = buildRealisticSeaRoute(startPort, destPort, false);
+  const startCoords = startPort.coords;
+  const destCoords = destPort.coords;
+
+  // Arabian Sea monsoonal rough swell node in Eurostat network
+  const STORM_NODE = [62.605, 16.55];
+  const CALM_CORRIDOR_NODE = [65.036875, 10.010938];
+
+  // Detect if voyage transits through or near the Arabian Sea / Suez trade corridor
+  const isArabianCorridor =
+    (startCoords[0] > 65 && destCoords[0] < 55) || // East (Asia/India) to West (Europe/Red Sea)
+    (startCoords[0] < 55 && destCoords[0] > 65) || // West to East
+    (startCoords[0] >= 50 && startCoords[0] <= 78 && startCoords[1] >= 10 && startCoords[1] <= 26 && destCoords[0] < 55) || // Mumbai/India to Europe
+    (destCoords[0] >= 50 && destCoords[0] <= 78 && destCoords[1] >= 10 && destCoords[1] <= 26 && startCoords[0] < 55);
+
+  let directRoute;
+  let ecoRoute;
+
+  if (isArabianCorridor) {
+    // 1. Direct Baseline Track cuts directly through the rough swell vortex [62.605, 16.55]
+    directRoute = buildRealisticSeaRoute(startPort, destPort, false, STORM_NODE);
+
+    // 2. AI Eco Route avoids the 4.2m rough swell by sailing the calm southern corridor
+    if (startCoords[0] >= 68 && startCoords[0] <= 78 && destCoords[0] < 55) {
+      // West India (e.g. Mumbai) to Europe/Suez: detour down to calm fairway [65.03, 10.01]
+      ecoRoute = buildRealisticSeaRoute(startPort, destPort, true, CALM_CORRIDOR_NODE);
+    } else {
+      // East Asia / Singapore to Europe/Suez: standard Eurostat track naturally runs south through [65.03, 10.01] and [60.0, 10.0]
+      ecoRoute = buildRealisticSeaRoute(startPort, destPort, true, null);
+    }
+  } else {
+    directRoute = buildRealisticSeaRoute(startPort, destPort, false, null);
+    ecoRoute = buildRealisticSeaRoute(startPort, destPort, true, null);
+  }
 
   const ecoNM = computeNauticalMiles(ecoRoute.coordinates);
   const directNM = computeNauticalMiles(directRoute.coordinates);
 
-  // Weather Intelligence Avoidance Zone (e.g. Arabian Sea High Swell Vortex)
-  const stormZone = {
-    name: 'Arabian Sea Monsoonal High Swell Center',
-    center: [64.0, 16.5],
-    waveHeight: '4.2m Rough',
-    windSpeed: '28 kts Gale',
-    avoidedByEcoRoute: true,
-  };
+  // Weather Intelligence Avoidance Zone (placed at the exact swell center that directRoute cuts through)
+  const stormZone = isArabianCorridor
+    ? {
+        name: 'Arabian Sea Monsoonal High Swell Center',
+        center: STORM_NODE,
+        waveHeight: '4.2m Rough',
+        windSpeed: '28 kts Gale',
+        avoidedByEcoRoute: true,
+      }
+    : null;
 
   const weatherSavings = {
     fuelSavingsPercent: 14.2,
