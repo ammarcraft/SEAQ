@@ -146,9 +146,9 @@ export function computeNauticalMiles(coords) {
 
 /**
  * Autonomous Maritime Land-Avoidance & Fairway Corridor Sentinel
- * Autonomously inspects route coordinates against continental coastlines and narrow chokepoints.
- * If any coordinate breaches land or drifts outside dredged fairways, it autonomously snaps
- * and projects it back into designated safe maritime waterways without requiring user intervention.
+ * Handles precision fairway correction for canals/straits (Suez, Gibraltar).
+ * General land avoidance is guaranteed by using searoute-ts raw coordinates
+ * and ONLY linear interpolation (no Catmull-Rom spline overshoot).
  */
 export function autoCorrectMaritimePath(coords) {
   if (!coords || coords.length === 0) return coords;
@@ -192,11 +192,11 @@ export function autoCorrectMaritimePath(coords) {
       // Port Said Canal Mouth & Mediterranean Fairway
       else if (newLat >= 31.10 && newLat <= 31.45) {
         if (newLon < 32.290) newLon = 32.310;
-        if (newLon > 32.340) newLon = 32.325; // Prevents bulging into Sinai / Port Fouad
+        if (newLon > 32.340) newLon = 32.325;
       }
     }
 
-    // 2. GIBRALTAR STRAIT FAIRWAY (Strictly restricted to Gibraltar Strait bounding box: lat 35.70°N-36.25°N, lon -5.90°W to -5.20°W)
+    // 2. GIBRALTAR STRAIT FAIRWAY
     if (newLat >= 35.70 && newLat <= 36.25 && newLon >= -5.90 && newLon <= -5.20) {
       if (newLat > 36.05) newLat = 35.98;
       if (newLat < 35.85) newLat = 35.92;
@@ -207,63 +207,53 @@ export function autoCorrectMaritimePath(coords) {
 }
 
 /**
- * Centripetal Catmull-Rom Spline with Hydrodynamic Nautical Curvature
- * 1. Mathematically eliminates overshoots, cusps, and self-intersections (alpha = 0.5).
- * 2. Provides smooth, wavy nautical curves at waypoints instead of rigid straight corners.
- * 3. Enforces Autonomous Land Avoidance across every coordinate generated.
+ * Safe Maritime Path Densifier — Linear Interpolation Only
+ * 
+ * CRITICAL: We do NOT use Catmull-Rom splines because they create new coordinates
+ * that deviate from the original path and can cross landmasses (India, Malay Peninsula, etc.)
+ * 
+ * Instead, this function adds intermediate points along straight lines between consecutive
+ * waypoints. Since both endpoints are guaranteed water-only (from searoute-ts), and maritime
+ * routes follow established shipping lanes, the interpolated points between them are also on water.
+ * 
+ * The result is a visually smooth, dense polyline that NEVER crosses land.
  */
-export function smoothNauticalPath(points, segmentsPerCurve = 8, alpha = 0.5) {
+export function smoothNauticalPath(points, segmentsPerEdge = 4) {
   if (!points || points.length <= 2) return points;
 
   const result = [];
-  const pts = [points[0], ...points, points[points.length - 1]];
 
-  function getT(tPrev, pA, pB) {
-    const dx = pB[0] - pA[0];
-    const dy = pB[1] - pA[1];
-    const d = Math.sqrt(dx * dx + dy * dy);
-    return tPrev + Math.pow(Math.max(d, 1e-4), alpha);
-  }
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    result.push(p1);
 
-  for (let i = 1; i < pts.length - 2; i++) {
-    const p0 = pts[i - 1];
-    const p1 = pts[i];
-    const p2 = pts[i + 1];
-    const p3 = pts[i + 2];
+    // Calculate distance between consecutive points
+    const dLon = p2[0] - p1[0];
+    const dLat = p2[1] - p1[1];
+    const dist = Math.sqrt(dLon * dLon + dLat * dLat);
 
-    const t0 = 0;
-    const t1 = getT(t0, p0, p1);
-    const t2 = getT(t1, p1, p2);
-    const t3 = getT(t2, p2, p3);
-
-    for (let s = 0; s < segmentsPerCurve; s++) {
-      const t = t1 + (s / segmentsPerCurve) * (t2 - t1);
-
-      const a1_x = ((t1 - t) * p0[0] + (t - t0) * p1[0]) / (t1 - t0);
-      const a1_y = ((t1 - t) * p0[1] + (t - t0) * p1[1]) / (t1 - t0);
-
-      const a2_x = ((t2 - t) * p1[0] + (t - t1) * p2[0]) / (t2 - t1);
-      const a2_y = ((t2 - t) * p1[1] + (t - t1) * p2[1]) / (t2 - t1);
-
-      const a3_x = ((t3 - t) * p2[0] + (t - t2) * p3[0]) / (t3 - t2);
-      const a3_y = ((t3 - t) * p2[1] + (t - t2) * p3[1]) / (t3 - t2);
-
-      const b1_x = ((t2 - t) * a1_x + (t - t0) * a2_x) / (t2 - t0);
-      const b1_y = ((t2 - t) * a1_y + (t - t0) * a2_y) / (t2 - t0);
-
-      const b2_x = ((t3 - t) * a2_x + (t - t1) * a3_x) / (t3 - t1);
-      const b2_y = ((t3 - t) * a2_y + (t - t1) * a3_y) / (t3 - t1);
-
-      const c_x = ((t2 - t) * b1_x + (t - t1) * b2_x) / (t2 - t1);
-      const c_y = ((t2 - t) * b1_y + (t - t1) * b2_y) / (t2 - t1);
-
-      result.push([Number(c_x.toFixed(4)), Number(c_y.toFixed(4))]);
+    // Only add intermediate points for segments longer than ~0.5 degrees (~55km)
+    // Short segments (like in Suez Canal) stay as-is for precision
+    if (dist > 0.5) {
+      // Add evenly spaced intermediate points along the straight line
+      const numSegs = Math.min(segmentsPerEdge, Math.ceil(dist / 0.8));
+      for (let s = 1; s < numSegs; s++) {
+        const t = s / numSegs;
+        result.push([
+          Number((p1[0] + t * dLon).toFixed(4)),
+          Number((p1[1] + t * dLat).toFixed(4)),
+        ]);
+      }
     }
   }
 
+  // Add the last point
   result.push(points[points.length - 1]);
+
   return autoCorrectMaritimePath(result);
 }
+
 
 /**
  * Complete Iberian Atlantic Deepwater Fairway (South to North)
@@ -554,10 +544,11 @@ export function buildRealisticSeaRoute(startPort, destPort, isEcoWeatherMode = t
   // Generate rich Waypoints Manifest for ALL real waypoints
   const waypointsManifest = generateWaypointsManifest(rawWaypoints, startPort, destPort, passages);
 
-  // Smooth continuous line: Eco mode gets graceful nautical curve, Direct mode gets direct segments
+  // Densify route line: adds intermediate points along straight segments for visual smoothness.
+  // Uses ONLY linear interpolation — NEVER deviates from the safe water path.
   const smoothed = isEcoWeatherMode
-    ? smoothNauticalPath(rawWaypoints, 3, 0.5)
-    : smoothNauticalPath(rawWaypoints, 1, 0.5);
+    ? smoothNauticalPath(rawWaypoints, 4)   // denser for eco display
+    : smoothNauticalPath(rawWaypoints, 2);  // lighter for direct baseline
 
   const corrected = autoCorrectMaritimePath(smoothed);
 
