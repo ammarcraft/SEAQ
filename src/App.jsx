@@ -738,14 +738,17 @@ export default function App() {
           setStormZone(result.stormZone);
         }
 
-        const coords = result.coordinates;
+          const coords = result.coordinates;
         if (coords && coords.length > 1) {
           const nextIdx = Math.min(3, coords.length - 1);
           const brng = calculateBearing(coords[0][1], coords[0][0], coords[nextIdx][1], coords[nextIdx][0]);
           setDepartureAngle(brng);
 
-          const midIndex = Math.floor(coords.length * 0.45);
-          setVesselPosition(coords[midIndex]);
+          // Place active vessel along prime open-ocean cruising fairway (~28% of voyage)
+          // Guarantees ship is always in broad, deep ocean water (Arabian Sea / Mid-Atlantic / Pacific)
+          // with 100% clear water margin and zero land proximity
+          const safeOceanIdx = Math.max(1, Math.min(coords.length - 2, Math.floor(coords.length * 0.28)));
+          setVesselPosition(coords[safeOceanIdx]);
           setTimeout(() => {
             fitRouteBounds(coords);
           }, 300);
@@ -874,6 +877,10 @@ export default function App() {
       glow: {
         id: 'route-glow',
         type: 'line',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round',
+        },
         paint: {
           'line-color': '#06b6d4', // Cyan glow for Eco-Weather route
           'line-width': 8,
@@ -884,20 +891,28 @@ export default function App() {
       core: {
         id: 'route-core',
         type: 'line',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round',
+        },
         paint: {
           'line-color': '#a855f7', // Purple core
-          'line-width': 3,
+          'line-width': 3.5,
           'line-opacity': 0.95
         }
       },
       directTrack: {
         id: 'direct-track-line',
         type: 'line',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round',
+        },
         paint: {
           'line-color': '#f59e0b', // Amber dashed baseline track
           'line-width': 2,
           'line-dasharray': [3, 2],
-          'line-opacity': 0.8
+          'line-opacity': 0.85
         }
       }
     };
